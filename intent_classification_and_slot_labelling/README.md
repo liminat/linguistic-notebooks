@@ -2,4 +2,60 @@
 
 
 ## Introduction
-Intent classification and slot labeling are two essential problems in Natural Language Understanding (NLU). In _intent classification_, the agent needs to detect the intention that the speaker's utterance conveys. For example, when the speaker says "Book a flight from Long Beach to Seattle", the intention is to book a flight ticket. In _slot labeling_, the agent needs to extract the semantic entities 
+Intent classification and slot labeling are two essential problems in Natural Language Understanding (NLU). In _intent classification_, the agent needs to detect the intention that the speaker's utterance conveys. For example, when the speaker says "Book a flight from Long Beach to Seattle", the intention is to book a flight ticket. In _slot labeling_, the agent needs to extract the semantic entities that are related to the intent. In our previous example, "Long Beach" and "Seattle" are two semantic constituents related to the flight, i.e., the origin and the destination.
+
+Essentially, _intent classification_ can be viewed as a sequence classification problem and _slot labeling_ can be viewed as a sequence tagging problem similar to Named-entity Recognition (NER). Due to their inner correlation, these two tasks are usually trained jointly with a multi-task objective function.  
+
+Here's one example of the ATIS dataset, it uses the [IOB2 format](https://en.wikipedia.org/wiki/Inside%E2%80%93outside%E2%80%93beginning_(tagging)).
+
+| Sentence  | Tags | Intent Label |
+| --------- | ---- | ------------ |
+|    are    | O    |    atis_flight |
+| there     | O    |  |
+| any       | O    |  |
+| flights   | O    |  |
+| from      | O    |  |
+| long      | B-fromloc.city_name |  |
+| beach     | I-fromloc.city_name |  |
+| to        | O                   |  |
+| columbus  | B-toloc.city_name   |  |
+| on        | O                   |  |
+| wednesday | B-depart_date.day_name    |  |
+| april     | B-depart_date.month_name  |  |
+| sixteen   | B-depart_date.day_number  |  |
+
+
+
+In this example, we demonstrate how to use GluonNLP to build a model to perform joint intent classification and slot labeling. We choose to finetune a pretrained BERT model.  We use two datasets [ATIS](https://github.com/yvchen/JointSLU) and [SNIPS](https://github.com/snipsco/nlu-benchmark/tree/master/2017-06-custom-intent-engines).
+ 
+## Requirements
+
+```
+mxnet
+gluonnlp
+seqeval
+```
+
+You may use pip or other tools to install these packages
+
+## Experiment
+For the ATIS dataset, use the following command to run the experiment:
+```bash
+python finetune_icsl.py --gpu 0 --dataset atis
+```
+
+It produces the final slot labeling F1 = `95.83%` and intent classification accuracy = `98.66%`
+
+For the SNIPS dataset, use the following command to run the experiment:
+```bash
+python finetune_icsl.py --gpu 0 --dataset snips
+```
+It produces the final slot labeling F1 = `96.06%` and intent classification accuracy = `98.71%`
+
+Also, we train the models with three random seeds and report the mean/std
+
+For ATIS
+
+| Models | Intent Acc (%) | Slot F1 (%) |
+| ------ | ------------------------ | ----------- |
+| [Intent Gating & self-attention, EMNLP 2018](https://www.aclweb.org/anthology/D18-1417) | 
