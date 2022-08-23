@@ -165,3 +165,6 @@ def load_translation_data(dataset, src_lang='en', tgt_lang='de'):
     test_tgt_sentences = list(test_text.transform(fetch_tgt_sentence))
     return data_train_processed, data_val_processed, data_test_processed, val_tgt_sentences, test_tgt_sentences, src_vocab, tgt_vocab
 
+
+def get_data_lengths(dataset):
+    return list(dataset.transform(lambda srg, tgt: (len(srg), len(tgt))))
