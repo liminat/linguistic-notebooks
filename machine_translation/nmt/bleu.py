@@ -99,4 +99,72 @@ def _tokenize_mteval_13a(segment):
     norm = norm.replace('&gt;', '>')
 
     norm = u' {} '.format(norm)
-    norm = re.sub(r'([\{-\~\[-\` -\&\(-\+\:-\@\/])', ' \\1 ', nor
+    norm = re.sub(r'([\{-\~\[-\` -\&\(-\+\:-\@\/])', ' \\1 ', norm)
+    norm = re.sub(r'([^0-9])([\.,])', '\\1 \\2 ', norm)
+    norm = re.sub(r'([\.,])([^0-9])', ' \\1 \\2', norm)
+    norm = re.sub(r'([0-9])(-)', '\\1 \\2 ', norm)
+    norm = re.sub(r'\s+', ' ', norm)
+    norm = re.sub(r'^\s+', '', norm)
+    norm = re.sub(r'\s+$', '', norm)
+
+    return norm
+
+
+class UnicodeRegex(object):
+    """Ad-hoc hack to recognize all punctuation and symbols.
+    """
+    def __init__(self):
+        punctuation = self._property_chars('P')
+        self.nondigit_punct_re = re.compile(r'([^\d])([' + punctuation + r'])')
+        self.punct_nondigit_re = re.compile(r'([' + punctuation + r'])([^\d])')
+        self.symbol_re = re.compile('([' + self._property_chars('S') + '])')
+
+    def _property_chars(self, prefix):
+        return ''.join(six.unichr(x) for x in range(sys.maxunicode)
+                       if unicodedata.category(six.unichr(x)).startswith(prefix))
+
+
+unicodeRegex = UnicodeRegex()
+
+
+def _tokenize_mteval_v14_intl(segment):
+    r"""Tokenize a string following following the international tokenizer in mteval-v14a.pl.
+    See https://github.com/moses-smt/mosesdecoder/"
+           "blob/master/scripts/generic/mteval-v14.pl#L954-L983
+
+    Parameters
+    ----------
+    segment: str
+        A string to be tokenized
+
+    Returns
+    -------
+    The tokenized string
+    """
+    segment = segment.rstrip()
+    segment = unicodeRegex.nondigit_punct_re.sub(r'\1 \2 ', segment)
+    segment = unicodeRegex.punct_nondigit_re.sub(r' \1 \2', segment)
+    segment = unicodeRegex.symbol_re.sub(r' \1 ', segment)
+    return segment.strip()
+
+
+TOKENIZERS = {
+    '13a': _tokenize_mteval_13a,
+    'intl': _tokenize_mteval_v14_intl,
+    None: lambda x: x,
+}
+
+
+def compute_bleu(reference_corpus_list, translation_corpus, tokenized=True,
+                 tokenizer='13a', max_n=4, smooth=False, lower_case=False,
+                 bpe=False, split_compound_word=False):
+    r"""Compute bleu score of translation against references.
+
+    Parameters
+    ----------
+    reference_corpus_list: list of list(list(str)) or list of list(str)
+        list of list(list(str)): tokenized references
+        list of list(str): plain text
+        List of references for each translation.
+    translation_corpus: list(list(str)) or list(str)
+        list(list(str)
