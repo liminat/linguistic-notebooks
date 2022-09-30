@@ -213,4 +213,67 @@ def compute_bleu(reference_corpus_list, translation_corpus, tokenized=True,
     for references, translation in zip(zip(*reference_corpus_list), translation_corpus):
         if not tokenized:
             references = [TOKENIZERS[tokenizer](reference).split() for reference in references]
-            translation = TOK
+            translation = TOKENIZERS[tokenizer](translation).split()
+        if bpe:
+            references = [_bpe_to_words(reference) for reference in references]
+            translation = _bpe_to_words(translation)
+        if split_compound_word:
+            references = [_split_compound_word(reference) for reference in references]
+            translation = _split_compound_word(translation)
+        if lower_case:
+            references = [[w.lower() for w in reference] for reference in references]
+            translation = [w.lower() for w in translation]
+        trans_len = len(translation)
+        trans_length += trans_len
+        ref_length += _closest_ref_length(references, trans_len)
+        for n in range(max_n):
+            matches, candidates = _compute_precision(references, translation, n + 1)
+            precision_numerators[n] += matches
+            precision_denominators[n] += candidates
+
+    precision_fractions = [(precision_numerators[n], precision_denominators[n])
+                           for n in range(max_n)]
+    smooth_const = 0
+    if smooth:
+        smooth_const = 1
+    precisions = _smoothing(precision_fractions, smooth_const)
+    if min(precisions) > 0:
+        precision_log_average = sum(math.log(p) for p in precisions) / max_n
+        precision_exp_log_average = math.exp(precision_log_average)
+    else:
+        precision_exp_log_average = 0
+
+    bp = _brevity_penalty(ref_length, trans_length)
+    bleu = precision_exp_log_average*bp
+
+    return bleu, precisions, bp, ref_length, trans_length
+
+
+def _compute_precision(references, translation, n):
+    """Compute ngram precision.
+
+    Parameters
+    ----------
+    references: list(list(str))
+        A list of references.
+    translation: list(str)
+        A translation.
+    n: int
+        Order of n-gram.
+
+    Returns
+    -------
+    matches: int
+        Number of matched nth order n-grams
+    candidates
+        Number of possible nth order n-grams
+    """
+    matches = 0
+    candidates = 0
+    ref_ngram_counts = Counter()
+
+    for reference in references:
+        ref_ngram_counts |= _ngrams(reference, n)
+    trans_ngram_counts = _ngrams(translation, n)
+    overlap_ngram_counts = trans_ngram_counts & ref_ngram_counts
+    m
