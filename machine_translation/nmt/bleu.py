@@ -276,4 +276,79 @@ def _compute_precision(references, translation, n):
         ref_ngram_counts |= _ngrams(reference, n)
     trans_ngram_counts = _ngrams(translation, n)
     overlap_ngram_counts = trans_ngram_counts & ref_ngram_counts
-    m
+    matches += sum(overlap_ngram_counts.values())
+    possible_matches = len(translation) - n + 1
+    if possible_matches > 0:
+        candidates += possible_matches
+
+    return matches, candidates
+
+
+def _brevity_penalty(ref_length, trans_length):
+    """Calculate brevity penalty.
+
+    Parameters
+    ----------
+    ref_length: int
+        Sum of all closest references'lengths for every translations in a corpus
+    trans_length: int
+        Sum of all translations's lengths in a corpus.
+
+    Returns
+    -------
+    bleu's brevity penalty: float
+    """
+    if trans_length > ref_length:
+        return 1
+    # If translation is empty, brevity penalty = 0 should result in BLEU = 0.0
+    elif trans_length == 0:
+        return 0
+    else:
+        return math.exp(1 - float(ref_length) / trans_length)
+
+
+def _closest_ref_length(references, trans_length):
+    """Find the reference that has the closest length to the translation.
+
+    Parameters
+    ----------
+    references: list(list(str))
+        A list of references.
+    trans_length: int
+        Length of the translation.
+
+    Returns
+    -------
+    closest_ref_len: int
+        Length of the reference that is closest to the translation.
+    """
+    ref_lengths = (len(reference) for reference in references)
+    closest_ref_len = min(ref_lengths,
+                          key=lambda ref_length: (abs(ref_length - trans_length), ref_length))
+
+    return closest_ref_len
+
+
+def _smoothing(precision_fractions, c=1):
+    """Compute the smoothed precision for all the orders.
+
+    Parameters
+    ----------
+    precision_fractions: list(tuple)
+        Contain a list of (precision_numerator, precision_denominator) pairs
+    c: int, default 1
+        Smoothing constant to use
+
+    Returns
+    -------
+    ratios: list of floats
+        Contain the smoothed precision_fractions.
+    """
+    ratios = [0] * len(precision_fractions)
+    for i, precision_fraction in enumerate(precision_fractions):
+        if precision_fraction[1] > 0:
+            ratios[i] = float(precision_fraction[0] + c) / (precision_fraction[1] + c)
+        else:
+            ratios[i] = 0.0
+
+    return ratios
