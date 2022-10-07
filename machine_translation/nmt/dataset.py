@@ -50,4 +50,22 @@ class TOY(_TranslationDataset):
         self._archive_file = {_get_pair_key('en', 'de'):
                                   ('translation_test.zip',
                                    '14f6c8e31ac6ec84ce469b4c196d60b4c86a179d')}
-        
+        self._data_file = {_get_pair_key('en', 'de'):
+                               {'train_en': ('train.en',
+                                             'aa7f22b91eb93390fd342a57a81f51f53ed29542'),
+                                'train_de': ('train.de',
+                                             'f914217ce23ddd8cac07e761a75685c043d4f6d3'),
+                                'val_en': ('train.en',
+                                           'aa7f22b91eb93390fd342a57a81f51f53ed29542'),
+                                'val_de': ('train.de',
+                                           'f914217ce23ddd8cac07e761a75685c043d4f6d3'),
+                                'test_en': ('train.en',
+                                            'aa7f22b91eb93390fd342a57a81f51f53ed29542'),
+                                'test_de': ('train.de',
+                                            'f914217ce23ddd8cac07e761a75685c043d4f6d3'),
+                                'vocab_en': ('vocab.en.json',
+                                             'c7c6af4603ea70f0a4af2460a622333fbd014050'),
+                                'vocab_de' : ('vocab.de.json',
+                                              '5b6f1be36a3e3cb9946b86e5d0fc73d164fda99f')}}
+        super(TOY, self).__init__('translation_test', segment=segment, src_lang=src_lang,
+                                  tgt_lang=tgt_lang, root=root)
