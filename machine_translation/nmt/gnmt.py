@@ -16,4 +16,59 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Encoder and d
+"""Encoder and decoder usded in sequence-to-sequence learning."""
+__all__ = ['GNMTEncoder', 'GNMTDecoder', 'get_gnmt_encoder_decoder']
+
+import mxnet as mx
+from mxnet.base import _as_list
+from mxnet.gluon import nn, rnn
+from mxnet.gluon.block import HybridBlock
+from gluonnlp.model.seq2seq_encoder_decoder import Seq2SeqEncoder, Seq2SeqDecoder, \
+     _get_attention_cell, _get_cell_type, _nested_sequence_last
+
+
+class GNMTEncoder(Seq2SeqEncoder):
+    r"""Structure of the RNN Encoder similar to that used in
+     "[Arxiv2016] Google's Neural Machine Translation System:
+                 Bridgeing the Gap between Human and Machine Translation"
+
+    The encoder first stacks several bidirectional RNN layers and then stacks multiple
+    uni-directional RNN layers with residual connections.
+
+    Parameters
+    ----------
+    cell_type : str or function
+        Can be "lstm", "gru" or constructor functions that can be directly called,
+         like rnn.LSTMCell
+    num_layers : int
+        Total number of layers
+    num_bi_layers : int
+        Total number of bidirectional layers
+    hidden_size : int
+        Number of hidden units
+    dropout : float
+        The dropout rate
+    use_residual : bool
+        Whether to use residual connection. Residual connection will be added in the
+        uni-directional RNN layers
+    i2h_weight_initializer : str or Initializer
+        Initializer for the input weights matrix, used for the linear
+        transformation of the inputs.
+    h2h_weight_initializer : str or Initializer
+        Initializer for the recurrent weights matrix, used for the linear
+        transformation of the recurrent state.
+    i2h_bias_initializer : str or Initializer
+        Initializer for the bias vector.
+    h2h_bias_initializer : str or Initializer
+        Initializer for the bias vector.
+    prefix : str, default 'rnn_'
+        Prefix for name of `Block`s
+        (and name of weight if params is `None`).
+    params : Parameter or None
+        Container for weight sharing between cells.
+        Created if `None`.
+    """
+    def __init__(self, cell_type='lstm', num_layers=2, num_bi_layers=1, hidden_size=128,
+                 dropout=0.0, use_residual=True,
+                 i2h_weight_initializer=None, h2h_weight_initializer=None,
+                 i2h_bias_initializer
