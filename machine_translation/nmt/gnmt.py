@@ -156,4 +156,59 @@ class GNMTEncoder(Seq2SeqEncoder):
             inputs = outputs
         if valid_length is not None:
             outputs = mx.nd.SequenceMask(outputs, sequence_length=valid_length,
-                                         use
+                                         use_sequence_length=True, axis=1)
+        return [outputs, new_states], []
+
+
+class GNMTDecoder(HybridBlock, Seq2SeqDecoder):
+    """Structure of the RNN Encoder similar to that used in the
+    Google Neural Machine Translation paper.
+
+    We use gnmt_v2 strategy in tensorflow/nmt
+
+    Parameters
+    ----------
+    cell_type : str or type
+    attention_cell : AttentionCell or str
+        Arguments of the attention cell.
+        Can be 'scaled_luong', 'normed_mlp', 'dot'
+    num_layers : int
+    hidden_size : int
+    dropout : float
+    use_residual : bool
+    output_attention: bool
+        Whether to output the attention weights
+    i2h_weight_initializer : str or Initializer
+        Initializer for the input weights matrix, used for the linear
+        transformation of the inputs.
+    h2h_weight_initializer : str or Initializer
+        Initializer for the recurrent weights matrix, used for the linear
+        transformation of the recurrent state.
+    i2h_bias_initializer : str or Initializer
+        Initializer for the bias vector.
+    h2h_bias_initializer : str or Initializer
+        Initializer for the bias vector.
+    prefix : str, default 'rnn_'
+        Prefix for name of `Block`s
+        (and name of weight if params is `None`).
+    params : Parameter or None
+        Container for weight sharing between cells.
+        Created if `None`.
+    """
+    def __init__(self, cell_type='lstm', attention_cell='scaled_luong',
+                 num_layers=2, hidden_size=128,
+                 dropout=0.0, use_residual=True, output_attention=False,
+                 i2h_weight_initializer=None, h2h_weight_initializer=None,
+                 i2h_bias_initializer='zeros', h2h_bias_initializer='zeros',
+                 prefix=None, params=None):
+        super(GNMTDecoder, self).__init__(prefix=prefix, params=params)
+        self._cell_type = _get_cell_type(cell_type)
+        self._num_layers = num_layers
+        self._hidden_size = hidden_size
+        self._dropout = dropout
+        self._use_residual = use_residual
+        self._output_attention = output_attention
+        with self.name_scope():
+            self.attention_cell = _get_attention_cell(attention_cell, units=hidden_size)
+            self.dropout_layer = nn.Dropout(dropout)
+            se
