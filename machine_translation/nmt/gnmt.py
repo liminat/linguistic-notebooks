@@ -106,4 +106,54 @@ class GNMTEncoder(Seq2SeqEncoder):
                         self._cell_type(hidden_size=self._hidden_size,
                                         i2h_weight_initializer=i2h_weight_initializer,
                                         h2h_weight_initializer=h2h_weight_initializer,
-                                      
+                                        i2h_bias_initializer=i2h_bias_initializer,
+                                        h2h_bias_initializer=h2h_bias_initializer,
+                                        prefix='rnn%d_' % i))
+
+    def __call__(self, inputs, states=None, valid_length=None):
+        """Encoder the inputs given the states and valid sequence length.
+
+        Parameters
+        ----------
+        inputs : NDArray
+            Input sequence. Shape (batch_size, length, C_in)
+        states : list of NDArrays or None
+            Initial states. The list of initial states
+        valid_length : NDArray or None
+            Valid lengths of each sequence. This is usually used when part of sequence has
+            been padded. Shape (batch_size,)
+
+        Returns
+        -------
+        encoder_outputs: list
+            Outputs of the encoder. Contains:
+
+            - outputs of the last RNN layer
+            - new_states of all the RNN layers
+        """
+        return super(GNMTEncoder, self).__call__(inputs, states, valid_length)
+
+    def forward(self, inputs, states=None, valid_length=None):  #pylint: disable=arguments-differ, missing-docstring
+        # TODO(sxjscience) Accelerate the forward using HybridBlock
+        _, length, _ = inputs.shape
+        new_states = []
+        outputs = inputs
+        for i, cell in enumerate(self.rnn_cells):
+            begin_state = None if states is None else states[i]
+            outputs, layer_states = cell.unroll(
+                length=length, inputs=inputs, begin_state=begin_state, merge_outputs=True,
+                valid_length=valid_length, layout='NTC')
+            if i < self._num_bi_layers:
+                # For bidirectional RNN, we use the states of the backward RNN
+                new_states.append(layer_states[len(self.rnn_cells[i].state_info()) // 2:])
+            else:
+                new_states.append(layer_states)
+            # Apply Dropout
+            outputs = self.dropout_layer(outputs)
+            if self._use_residual:
+                if i > self._num_bi_layers:
+                    outputs = outputs + inputs
+            inputs = outputs
+        if valid_length is not None:
+            outputs = mx.nd.SequenceMask(outputs, sequence_length=valid_length,
+                                         use
