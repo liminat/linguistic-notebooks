@@ -211,4 +211,58 @@ class GNMTDecoder(HybridBlock, Seq2SeqDecoder):
         with self.name_scope():
             self.attention_cell = _get_attention_cell(attention_cell, units=hidden_size)
             self.dropout_layer = nn.Dropout(dropout)
-            se
+            self.rnn_cells = nn.HybridSequential()
+            for i in range(num_layers):
+                self.rnn_cells.add(
+                    self._cell_type(hidden_size=self._hidden_size,
+                                    i2h_weight_initializer=i2h_weight_initializer,
+                                    h2h_weight_initializer=h2h_weight_initializer,
+                                    i2h_bias_initializer=i2h_bias_initializer,
+                                    h2h_bias_initializer=h2h_bias_initializer,
+                                    prefix='rnn%d_' % i))
+
+    def init_state_from_encoder(self, encoder_outputs, encoder_valid_length=None):
+        """Initialize the state from the encoder outputs.
+
+        Parameters
+        ----------
+        encoder_outputs : list
+        encoder_valid_length : NDArray or None
+
+        Returns
+        -------
+        decoder_states : list
+            The decoder states, includes:
+
+            - rnn_states : NDArray
+            - attention_vec : NDArray
+            - mem_value : NDArray
+            - mem_masks : NDArray, optional
+        """
+        mem_value, rnn_states = encoder_outputs
+        batch_size, _, mem_size = mem_value.shape
+        attention_vec = mx.nd.zeros(shape=(batch_size, mem_size), ctx=mem_value.context)
+        decoder_states = [rnn_states, attention_vec, mem_value]
+        mem_length = mem_value.shape[1]
+        if encoder_valid_length is not None:
+            mem_masks = mx.nd.broadcast_lesser(
+                mx.nd.arange(mem_length, ctx=encoder_valid_length.context).reshape((1, -1)),
+                encoder_valid_length.reshape((-1, 1)))
+            decoder_states.append(mem_masks)
+        return decoder_states
+
+    def decode_seq(self, inputs, states, valid_length=None):
+        """Decode the decoder inputs. This function is only used for training.
+
+        Parameters
+        ----------
+        inputs : NDArray, Shape (batch_size, length, C_in)
+        states : list of NDArrays or None
+            Initial states. The list of initial decoder states
+        valid_length : NDArray or None
+            Valid lengths of each sequence. This is usually used when part of sequence has
+            been padded. Shape (batch_size,)
+
+        Returns
+        -------
+        output : NDArray, Shape (batch_
