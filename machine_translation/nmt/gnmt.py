@@ -265,4 +265,60 @@ class GNMTDecoder(HybridBlock, Seq2SeqDecoder):
 
         Returns
         -------
-        output : NDArray, Shape (batch_
+        output : NDArray, Shape (batch_size, length, C_out)
+        states : list
+            The decoder states, includes:
+
+            - rnn_states : NDArray
+            - attention_vec : NDArray
+            - mem_value : NDArray
+            - mem_masks : NDArray, optional
+        additional_outputs : list
+            Either be an empty list or contains the attention weights in this step.
+            The attention weights will have shape (batch_size, length, mem_length) or
+            (batch_size, num_heads, length, mem_length)
+        """
+        length = inputs.shape[1]
+        output = []
+        additional_outputs = []
+        inputs = _as_list(mx.nd.split(inputs, num_outputs=length, axis=1, squeeze_axis=True))
+        rnn_states_l = []
+        attention_output_l = []
+        fixed_states = states[2:]
+        for i in range(length):
+            ele_output, states, ele_additional_outputs = self.forward(inputs[i], states)
+            rnn_states_l.append(states[0])
+            attention_output_l.append(states[1])
+            output.append(ele_output)
+            additional_outputs.extend(ele_additional_outputs)
+        output = mx.nd.stack(*output, axis=1)
+        if valid_length is not None:
+            states = [_nested_sequence_last(rnn_states_l, valid_length),
+                      _nested_sequence_last(attention_output_l, valid_length)] + fixed_states
+            output = mx.nd.SequenceMask(output,
+                                        sequence_length=valid_length,
+                                        use_sequence_length=True,
+                                        axis=1)
+        if self._output_attention:
+            additional_outputs = [mx.nd.concat(*additional_outputs, dim=-2)]
+        return output, states, additional_outputs
+
+    def __call__(self, step_input, states): #pylint: disable=arguments-differ
+        """One-step-ahead decoding of the GNMT decoder.
+
+        Parameters
+        ----------
+        step_input : NDArray or Symbol
+        states : list of NDArray or Symbol
+
+        Returns
+        -------
+        step_output : NDArray or Symbol
+            The output of the decoder. Shape is (batch_size, C_out)
+        new_states: list
+            Includes
+
+            - rnn_states : list of NDArray or Symbol
+            - attention_vec : NDArray or Symbol, Shape (batch_size, C_memory)
+            - mem_value : NDArray
+            - me
