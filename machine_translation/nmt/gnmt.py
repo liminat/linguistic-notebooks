@@ -321,4 +321,53 @@ class GNMTDecoder(HybridBlock, Seq2SeqDecoder):
             - rnn_states : list of NDArray or Symbol
             - attention_vec : NDArray or Symbol, Shape (batch_size, C_memory)
             - mem_value : NDArray
-            - me
+            - mem_masks : NDArray, optional
+
+        step_additional_outputs : list
+            Either be an empty list or contains the attention weights in this step.
+            The attention weights will have shape (batch_size, 1, mem_length) or
+            (batch_size, num_heads, 1, mem_length)
+        """
+        return super(GNMTDecoder, self).__call__(step_input, states)
+
+    def forward(self, step_input, states):  #pylint: disable=arguments-differ, missing-docstring
+        step_output, new_states, step_additional_outputs =\
+            super(GNMTDecoder, self).forward(step_input, states)
+        # In hybrid_forward, only the rnn_states and attention_vec are calculated.
+        # We directly append the mem_value and mem_masks in the forward() function.
+        # We apply this trick because the memory value/mask can be directly appended to the next
+        # timestamp and there is no need to create additional NDArrays. If we use HybridBlock,
+        # new NDArrays will be created even for identity mapping.
+        # See https://github.com/apache/incubator-mxnet/issues/10167
+        new_states += states[2:]
+        return step_output, new_states, step_additional_outputs
+
+    def hybrid_forward(self, F, step_input, states):  #pylint: disable=arguments-differ
+        """
+
+        Parameters
+        ----------
+        step_input : NDArray or Symbol
+        states : list of NDArray or Symbol
+
+        Returns
+        -------
+        step_output : NDArray or Symbol
+            The output of the decoder. Shape is (batch_size, C_out)
+        new_states: list
+            Includes
+
+            - rnn_states : list of NDArray or Symbol
+            - attention_vec : NDArray or Symbol, Shape (batch_size, C_memory)
+
+        step_additional_outputs : list
+            Either be an empty list or contains the attention weights in this step.
+            The attention weights will have shape (batch_size, 1, mem_length) or
+            (batch_size, num_heads, 1, mem_length)
+
+        """
+        has_mem_mask = (len(states) == 4)
+        if has_mem_mask:
+            rnn_states, attention_output, mem_value, mem_masks = states
+            mem_masks = F.expand_dims(mem_masks, axis=1)
+        el
