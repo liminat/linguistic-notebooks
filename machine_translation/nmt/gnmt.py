@@ -370,4 +370,54 @@ class GNMTDecoder(HybridBlock, Seq2SeqDecoder):
         if has_mem_mask:
             rnn_states, attention_output, mem_value, mem_masks = states
             mem_masks = F.expand_dims(mem_masks, axis=1)
-        el
+        else:
+            rnn_states, attention_output, mem_value = states
+            mem_masks = None
+        new_rnn_states = []
+        # Process the first layer
+        rnn_out, layer_state =\
+            self.rnn_cells[0](F.concat(step_input, attention_output, dim=-1), rnn_states[0])
+        new_rnn_states.append(layer_state)
+        attention_vec, attention_weights =\
+            self.attention_cell(F.expand_dims(rnn_out, axis=1),  # Shape(B, 1, C)
+                                mem_value,
+                                mem_value,
+                                mem_masks)
+        attention_vec = F.reshape(attention_vec, shape=(0, -1))
+        # Process the 2nd layer - the last layer
+        for i in range(1, len(self.rnn_cells)):
+            curr_input = rnn_out
+            rnn_cell = self.rnn_cells[i]
+            # Concatenate the attention vector calculated by the bottom layer and the output of the
+            # previous layer
+            rnn_out, layer_state = rnn_cell(F.concat(curr_input, attention_vec, dim=-1),
+                                            rnn_states[i])
+            rnn_out = self.dropout_layer(rnn_out)
+            if self._use_residual:
+                rnn_out = rnn_out + curr_input
+            # Append new RNN state
+            new_rnn_states.append(layer_state)
+        new_states = [new_rnn_states, attention_vec]
+        step_additional_outputs = []
+        if self._output_attention:
+            step_additional_outputs.append(attention_weights)
+        return rnn_out, new_states, step_additional_outputs
+
+
+def get_gnmt_encoder_decoder(cell_type='lstm', attention_cell='scaled_luong', num_layers=2,
+                             num_bi_layers=1, hidden_size=128, dropout=0.0, use_residual=False,
+                             i2h_weight_initializer=None, h2h_weight_initializer=None,
+                             i2h_bias_initializer=mx.init.LSTMBias(forget_bias=1.0),
+                             h2h_bias_initializer='zeros',
+                             prefix='gnmt_', params=None):
+    """Build a pair of GNMT encoder/decoder
+
+    Parameters
+    ----------
+    cell_type : str or type
+    attention_cell : str or AttentionCell
+    num_layers : int
+    num_bi_layers : int
+    hidden_size : int
+    dropout : float
+    use_residual : boo
