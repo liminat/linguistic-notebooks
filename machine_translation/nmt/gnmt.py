@@ -420,4 +420,36 @@ def get_gnmt_encoder_decoder(cell_type='lstm', attention_cell='scaled_luong', nu
     num_bi_layers : int
     hidden_size : int
     dropout : float
-    use_residual : boo
+    use_residual : bool
+    i2h_weight_initializer : mx.init.Initializer or None
+    h2h_weight_initializer : mx.init.Initializer or None
+    i2h_bias_initializer : mx.init.Initializer or None
+    h2h_bias_initializer : mx.init.Initializer or None
+    prefix : str, default 'gnmt_'
+        Prefix for name of `Block`s.
+    params : Parameter or None
+        Container for weight sharing between cells.
+        Created if `None`.
+
+    Returns
+    -------
+    encoder : GNMTEncoder
+    decoder : GNMTDecoder
+    """
+    encoder = GNMTEncoder(cell_type=cell_type, num_layers=num_layers, num_bi_layers=num_bi_layers,
+                          hidden_size=hidden_size, dropout=dropout,
+                          use_residual=use_residual,
+                          i2h_weight_initializer=i2h_weight_initializer,
+                          h2h_weight_initializer=h2h_weight_initializer,
+                          i2h_bias_initializer=i2h_bias_initializer,
+                          h2h_bias_initializer=h2h_bias_initializer,
+                          prefix=prefix + 'enc_', params=params)
+    decoder = GNMTDecoder(cell_type=cell_type, attention_cell=attention_cell, num_layers=num_layers,
+                          hidden_size=hidden_size, dropout=dropout,
+                          use_residual=use_residual,
+                          i2h_weight_initializer=i2h_weight_initializer,
+                          h2h_weight_initializer=h2h_weight_initializer,
+                          i2h_bias_initializer=i2h_bias_initializer,
+                          h2h_bias_initializer=h2h_bias_initializer,
+                          prefix=prefix + 'dec_', params=params)
+    return encoder, decoder
