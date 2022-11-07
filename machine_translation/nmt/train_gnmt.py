@@ -96,4 +96,49 @@ parser.add_argument('--lr_update_factor', type=float, default=0.5,
 parser.add_argument('--clip', type=float, default=5.0, help='gradient clipping')
 parser.add_argument('--log_interval', type=int, default=100, metavar='N',
                     help='report interval')
-parser.add_argument('--save_dir', type=str, default='out_
+parser.add_argument('--save_dir', type=str, default='out_dir',
+                    help='directory path to save the final model and training log')
+parser.add_argument('--gpu', type=int, default=None,
+                    help='id of the gpu to use. Set it to empty means to use cpu.')
+args = parser.parse_args()
+print(args)
+logging_config(args.save_dir)
+
+
+data_train, data_val, data_test, val_tgt_sentences, test_tgt_sentences, src_vocab, tgt_vocab\
+    = dataprocessor.load_translation_data(dataset=args.dataset, bleu='tweaked', args=args)
+
+dataprocessor.write_sentences(val_tgt_sentences, os.path.join(args.save_dir, 'val_gt.txt'))
+dataprocessor.write_sentences(test_tgt_sentences, os.path.join(args.save_dir, 'test_gt.txt'))
+
+data_train = data_train.transform(lambda src, tgt: (src, tgt, len(src), len(tgt)), lazy=False)
+data_val = gluon.data.SimpleDataset([(ele[0], ele[1], len(ele[0]), len(ele[1]), i)
+                                     for i, ele in enumerate(data_val)])
+data_test = gluon.data.SimpleDataset([(ele[0], ele[1], len(ele[0]), len(ele[1]), i)
+                                      for i, ele in enumerate(data_test)])
+if args.gpu is None:
+    ctx = mx.cpu()
+    print('Use CPU')
+else:
+    ctx = mx.gpu(args.gpu)
+
+encoder, decoder = get_gnmt_encoder_decoder(hidden_size=args.num_hidden,
+                                            dropout=args.dropout,
+                                            num_layers=args.num_layers,
+                                            num_bi_layers=args.num_bi_layers)
+model = NMTModel(src_vocab=src_vocab, tgt_vocab=tgt_vocab, encoder=encoder, decoder=decoder,
+                 embed_size=args.num_hidden, prefix='gnmt_')
+model.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
+static_alloc = True
+model.hybridize(static_alloc=static_alloc)
+logging.info(model)
+
+translator = BeamSearchTranslator(model=model, beam_size=args.beam_size,
+                                  scorer=nlp.model.BeamSearchScorer(alpha=args.lp_alpha,
+                                                                    K=args.lp_k),
+                                  max_length=args.tgt_max_len + 100)
+logging.info('Use beam_size={}, alpha={}, K={}'.format(args.beam_size, args.lp_alpha, args.lp_k))
+
+
+loss_function = MaskedSoftmaxCELoss()
+loss_function.hybridize(static_alloc
