@@ -141,4 +141,63 @@ logging.info('Use beam_size={}, alpha={}, K={}'.format(args.beam_size, args.lp_a
 
 
 loss_function = MaskedSoftmaxCELoss()
-loss_function.hybridize(static_alloc
+loss_function.hybridize(static_alloc=static_alloc)
+
+
+def evaluate(data_loader):
+    """Evaluate given the data loader
+
+    Parameters
+    ----------
+    data_loader : DataLoader
+
+    Returns
+    -------
+    avg_loss : float
+        Average loss
+    real_translation_out : list of list of str
+        The translation output
+    """
+    translation_out = []
+    all_inst_ids = []
+    avg_loss_denom = 0
+    avg_loss = 0.0
+    for _, (src_seq, tgt_seq, src_valid_length, tgt_valid_length, inst_ids) \
+            in enumerate(data_loader):
+        src_seq = src_seq.as_in_context(ctx)
+        tgt_seq = tgt_seq.as_in_context(ctx)
+        src_valid_length = src_valid_length.as_in_context(ctx)
+        tgt_valid_length = tgt_valid_length.as_in_context(ctx)
+        # Calculating Loss
+        out, _ = model(src_seq, tgt_seq[:, :-1], src_valid_length, tgt_valid_length - 1)
+        loss = loss_function(out, tgt_seq[:, 1:], tgt_valid_length - 1).mean().asscalar()
+        all_inst_ids.extend(inst_ids.asnumpy().astype(np.int32).tolist())
+        avg_loss += loss * (tgt_seq.shape[1] - 1)
+        avg_loss_denom += (tgt_seq.shape[1] - 1)
+        # Translate
+        samples, _, sample_valid_length =\
+            translator.translate(src_seq=src_seq, src_valid_length=src_valid_length)
+        max_score_sample = samples[:, 0, :].asnumpy()
+        sample_valid_length = sample_valid_length[:, 0].asnumpy()
+        for i in range(max_score_sample.shape[0]):
+            translation_out.append(
+                [tgt_vocab.idx_to_token[ele] for ele in
+                 max_score_sample[i][1:(sample_valid_length[i] - 1)]])
+    avg_loss = avg_loss / avg_loss_denom
+    real_translation_out = [None for _ in range(len(all_inst_ids))]
+    for ind, sentence in zip(all_inst_ids, translation_out):
+        real_translation_out[ind] = sentence
+    return avg_loss, real_translation_out
+
+
+def train():
+    """Training function."""
+    trainer = gluon.Trainer(model.collect_params(), args.optimizer, {'learning_rate': args.lr})
+
+    train_data_loader, val_data_loader, test_data_loader \
+        = dataprocessor.make_dataloader(data_train, data_val, data_test, args)
+
+    best_valid_bleu = 0.0
+    for epoch_id in range(args.epochs):
+        log_avg_loss = 0
+        log_avg_
