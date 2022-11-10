@@ -238,4 +238,35 @@ def train():
                 log_avg_gnorm = 0
                 log_wc = 0
         valid_loss, valid_translation_out = evaluate(val_data_loader)
-        valid_bleu_score, _, _, _, _ = compute_bleu([val_tgt_sentences
+        valid_bleu_score, _, _, _, _ = compute_bleu([val_tgt_sentences], valid_translation_out)
+        logging.info('[Epoch {}] valid Loss={:.4f}, valid ppl={:.4f}, valid bleu={:.2f}'
+                     .format(epoch_id, valid_loss, np.exp(valid_loss), valid_bleu_score * 100))
+        test_loss, test_translation_out = evaluate(test_data_loader)
+        test_bleu_score, _, _, _, _ = compute_bleu([test_tgt_sentences], test_translation_out)
+        logging.info('[Epoch {}] test Loss={:.4f}, test ppl={:.4f}, test bleu={:.2f}'
+                     .format(epoch_id, test_loss, np.exp(test_loss), test_bleu_score * 100))
+        dataprocessor.write_sentences(valid_translation_out,
+                                      os.path.join(args.save_dir,
+                                                   'epoch{:d}_valid_out.txt').format(epoch_id))
+        dataprocessor.write_sentences(test_translation_out,
+                                      os.path.join(args.save_dir,
+                                                   'epoch{:d}_test_out.txt').format(epoch_id))
+        if valid_bleu_score > best_valid_bleu:
+            best_valid_bleu = valid_bleu_score
+            save_path = os.path.join(args.save_dir, 'valid_best.params')
+            logging.info('Save best parameters to {}'.format(save_path))
+            model.save_parameters(save_path)
+        if epoch_id + 1 >= (args.epochs * 2) // 3:
+            new_lr = trainer.learning_rate * args.lr_update_factor
+            logging.info('Learning rate change to {}'.format(new_lr))
+            trainer.set_learning_rate(new_lr)
+    if os.path.exists(os.path.join(args.save_dir, 'valid_best.params')):
+        model.load_parameters(os.path.join(args.save_dir, 'valid_best.params'))
+    valid_loss, valid_translation_out = evaluate(val_data_loader)
+    valid_bleu_score, _, _, _, _ = compute_bleu([val_tgt_sentences], valid_translation_out)
+    logging.info('Best model valid Loss={:.4f}, valid ppl={:.4f}, valid bleu={:.2f}'
+                 .format(valid_loss, np.exp(valid_loss), valid_bleu_score * 100))
+    test_loss, test_translation_out = evaluate(test_data_loader)
+    test_bleu_score, _, _, _, _ = compute_bleu([test_tgt_sentences], test_translation_out)
+    logging.info('Best model test Loss={:.4f}, test ppl={:.4f}, test bleu={:.2f}'
+                 .format(test_loss, np.exp(test_loss), t
