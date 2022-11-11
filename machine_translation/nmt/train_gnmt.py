@@ -269,4 +269,12 @@ def train():
     test_loss, test_translation_out = evaluate(test_data_loader)
     test_bleu_score, _, _, _, _ = compute_bleu([test_tgt_sentences], test_translation_out)
     logging.info('Best model test Loss={:.4f}, test ppl={:.4f}, test bleu={:.2f}'
-                 .format(test_loss, np.exp(test_loss), t
+                 .format(test_loss, np.exp(test_loss), test_bleu_score * 100))
+    dataprocessor.write_sentences(valid_translation_out,
+                                  os.path.join(args.save_dir, 'best_valid_out.txt'))
+    dataprocessor.write_sentences(test_translation_out,
+                                  os.path.join(args.save_dir, 'best_test_out.txt'))
+
+
+if __name__ == '__main__':
+    train()
