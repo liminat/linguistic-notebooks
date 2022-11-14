@@ -89,4 +89,33 @@ parser.add_argument('--num_buckets', type=int, default=10, help='Bucket number')
 parser.add_argument('--bucket_scheme', type=str, default='constant',
                     help='Strategy for generating bucket keys. It supports: '
                          '"constant": all the buckets have the same width; '
-                         '"linear": t
+                         '"linear": the width of bucket increases linearly; '
+                         '"exp": the width of bucket increases exponentially')
+parser.add_argument('--bucket_ratio', type=float, default=0.0, help='Ratio for increasing the '
+                                                                    'throughput of the bucketing')
+parser.add_argument('--src_max_len', type=int, default=-1, help='Maximum length of the source '
+                                                                'sentence, -1 means no clipping')
+parser.add_argument('--tgt_max_len', type=int, default=-1, help='Maximum length of the target '
+                                                                'sentence, -1 means no clipping')
+parser.add_argument('--optimizer', type=str, default='adam', help='optimization algorithm')
+parser.add_argument('--lr', type=float, default=1.0, help='Initial learning rate')
+parser.add_argument('--warmup_steps', type=float, default=4000,
+                    help='number of warmup steps used in NOAM\'s stepsize schedule')
+parser.add_argument('--num_accumulated', type=int, default=1,
+                    help='Number of steps to accumulate the gradients. '
+                         'This is useful to mimic large batch training with limited gpu memory')
+parser.add_argument('--magnitude', type=float, default=3.0,
+                    help='Magnitude of Xavier initialization')
+parser.add_argument('--average_checkpoint', action='store_true',
+                    help='Turn on to perform final testing based on '
+                         'the average of last few checkpoints')
+parser.add_argument('--num_averages', type=int, default=5,
+                    help='Perform final testing based on the '
+                         'average of last num_averages checkpoints. '
+                         'This is only used if average_checkpoint is True')
+parser.add_argument('--average_start', type=int, default=5,
+                    help='Perform average SGD on last average_start epochs')
+parser.add_argument('--full', action='store_true',
+                    help='In default, we use the test dataset in'
+                         ' http://statmt.org/wmt14/test-filtered.tgz.'
+                         ' When the option full is turned on,
