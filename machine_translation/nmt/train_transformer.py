@@ -118,4 +118,42 @@ parser.add_argument('--average_start', type=int, default=5,
 parser.add_argument('--full', action='store_true',
                     help='In default, we use the test dataset in'
                          ' http://statmt.org/wmt14/test-filtered.tgz.'
-                         ' When the option full is turned on,
+                         ' When the option full is turned on, we use the test dataset in'
+                         ' http://statmt.org/wmt14/test-full.tgz')
+parser.add_argument('--bleu', type=str, default='tweaked',
+                    help='Schemes for computing bleu score. It can be: '
+                    '"tweaked": it uses similar steps in get_ende_bleu.sh in tensor2tensor '
+                    'repository, where compound words are put in ATAT format; '
+                    '"13a": This uses official WMT tokenization and produces the same results'
+                    ' as official script (mteval-v13a.pl) used by WMT; '
+                    '"intl": This use international tokenization in mteval-v14a.pl')
+parser.add_argument('--log_interval', type=int, default=100, metavar='N',
+                    help='report interval')
+parser.add_argument('--save_dir', type=str, default='transformer_out',
+                    help='directory path to save the final model and training log')
+parser.add_argument('--gpus', type=str,
+                    help='list of gpus to run, e.g. 0 or 0,2,5. empty means using cpu.'
+                         '(using single gpu is suggested)')
+args = parser.parse_args()
+logging_config(args.save_dir)
+logging.info(args)
+
+
+data_train, data_val, data_test, val_tgt_sentences, test_tgt_sentences, src_vocab, tgt_vocab \
+    = dataprocessor.load_translation_data(dataset=args.dataset, bleu=args.bleu, args=args)
+
+dataprocessor.write_sentences(val_tgt_sentences, os.path.join(args.save_dir, 'val_gt.txt'))
+dataprocessor.write_sentences(test_tgt_sentences, os.path.join(args.save_dir, 'test_gt.txt'))
+
+data_train = data_train.transform(lambda src, tgt: (src, tgt, len(src), len(tgt)), lazy=False)
+data_val = gluon.data.SimpleDataset([(ele[0], ele[1], len(ele[0]), len(ele[1]), i)
+                                     for i, ele in enumerate(data_val)])
+data_test = gluon.data.SimpleDataset([(ele[0], ele[1], len(ele[0]), len(ele[1]), i)
+                                      for i, ele in enumerate(data_test)])
+
+ctx = [mx.cpu()] if args.gpus is None or args.gpus == '' else \
+    [mx.gpu(int(x)) for x in args.gpus.split(',')]
+num_ctxs = len(ctx)
+
+data_train_lengths, data_val_lengths, data_test_lengths = [dataprocessor.get_data_lengths(x)
+                                                           fo
