@@ -201,4 +201,64 @@ loss_function = MaskedSoftmaxCELoss(sparse_label=False)
 loss_function.hybridize(static_alloc=static_alloc)
 
 test_loss_function = MaskedSoftmaxCELoss()
-test_loss_function.hybridize(static_alloc=st
+test_loss_function.hybridize(static_alloc=static_alloc)
+
+rescale_loss = 100
+parallel_model = ParallelTransformer(model, label_smoothing, loss_function, rescale_loss)
+detokenizer = nlp.data.SacreMosesDetokenizer()
+
+
+def evaluate(data_loader, context=ctx[0]):
+    """Evaluate given the data loader
+
+    Parameters
+    ----------
+    data_loader : DataLoader
+
+    Returns
+    -------
+    avg_loss : float
+        Average loss
+    real_translation_out : list of list of str
+        The translation output
+    """
+    translation_out = []
+    all_inst_ids = []
+    avg_loss_denom = 0
+    avg_loss = 0.0
+    for _, (src_seq, tgt_seq, src_valid_length, tgt_valid_length, inst_ids) \
+            in enumerate(data_loader):
+        src_seq = src_seq.as_in_context(context)
+        tgt_seq = tgt_seq.as_in_context(context)
+        src_valid_length = src_valid_length.as_in_context(context)
+        tgt_valid_length = tgt_valid_length.as_in_context(context)
+        # Calculating Loss
+        out, _ = model(src_seq, tgt_seq[:, :-1], src_valid_length, tgt_valid_length - 1)
+        loss = test_loss_function(out, tgt_seq[:, 1:], tgt_valid_length - 1).mean().asscalar()
+        all_inst_ids.extend(inst_ids.asnumpy().astype(np.int32).tolist())
+        avg_loss += loss * (tgt_seq.shape[1] - 1)
+        avg_loss_denom += (tgt_seq.shape[1] - 1)
+        # Translate
+        samples, _, sample_valid_length = \
+            translator.translate(src_seq=src_seq, src_valid_length=src_valid_length)
+        max_score_sample = samples[:, 0, :].asnumpy()
+        sample_valid_length = sample_valid_length[:, 0].asnumpy()
+        for i in range(max_score_sample.shape[0]):
+            translation_out.append(
+                [tgt_vocab.idx_to_token[ele] for ele in
+                 max_score_sample[i][1:(sample_valid_length[i] - 1)]])
+    avg_loss = avg_loss / avg_loss_denom
+    real_translation_out = [None for _ in range(len(all_inst_ids))]
+    for ind, sentence in zip(all_inst_ids, translation_out):
+        if args.bleu == 'tweaked':
+            real_translation_out[ind] = sentence
+        elif args.bleu == '13a' or args.bleu == 'intl':
+            real_translation_out[ind] = detokenizer(_bpe_to_words(sentence))
+        else:
+            raise NotImplementedError
+    return avg_loss, real_translation_out
+
+
+def train():
+    """Training function."""
+    t
