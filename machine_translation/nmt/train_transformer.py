@@ -156,4 +156,49 @@ ctx = [mx.cpu()] if args.gpus is None or args.gpus == '' else \
 num_ctxs = len(ctx)
 
 data_train_lengths, data_val_lengths, data_test_lengths = [dataprocessor.get_data_lengths(x)
-                                                           fo
+                                                           for x in
+                                                           [data_train, data_val, data_test]]
+
+if args.src_max_len <= 0 or args.tgt_max_len <= 0:
+    max_len = np.max(
+        [np.max(data_train_lengths, axis=0), np.max(data_val_lengths, axis=0),
+         np.max(data_test_lengths, axis=0)],
+        axis=0)
+if args.src_max_len > 0:
+    src_max_len = args.src_max_len
+else:
+    src_max_len = max_len[0]
+if args.tgt_max_len > 0:
+    tgt_max_len = args.tgt_max_len
+else:
+    tgt_max_len = max_len[1]
+encoder, decoder = get_transformer_encoder_decoder(units=args.num_units,
+                                                   hidden_size=args.hidden_size,
+                                                   dropout=args.dropout,
+                                                   num_layers=args.num_layers,
+                                                   num_heads=args.num_heads,
+                                                   max_src_length=max(src_max_len, 500),
+                                                   max_tgt_length=max(tgt_max_len, 500),
+                                                   scaled=args.scaled)
+model = NMTModel(src_vocab=src_vocab, tgt_vocab=tgt_vocab, encoder=encoder, decoder=decoder,
+                 share_embed=args.dataset != 'TOY', embed_size=args.num_units,
+                 tie_weights=args.dataset != 'TOY', embed_initializer=None, prefix='transformer_')
+model.initialize(init=mx.init.Xavier(magnitude=args.magnitude), ctx=ctx)
+static_alloc = True
+model.hybridize(static_alloc=static_alloc)
+logging.info(model)
+
+translator = BeamSearchTranslator(model=model, beam_size=args.beam_size,
+                                  scorer=nlp.model.BeamSearchScorer(alpha=args.lp_alpha,
+                                                                    K=args.lp_k),
+                                  max_length=200)
+logging.info('Use beam_size={}, alpha={}, K={}'.format(args.beam_size, args.lp_alpha, args.lp_k))
+
+label_smoothing = LabelSmoothing(epsilon=args.epsilon, units=len(tgt_vocab))
+label_smoothing.hybridize(static_alloc=static_alloc)
+
+loss_function = MaskedSoftmaxCELoss(sparse_label=False)
+loss_function.hybridize(static_alloc=static_alloc)
+
+test_loss_function = MaskedSoftmaxCELoss()
+test_loss_function.hybridize(static_alloc=st
