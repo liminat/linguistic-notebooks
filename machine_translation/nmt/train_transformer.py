@@ -261,4 +261,55 @@ def evaluate(data_loader, context=ctx[0]):
 
 def train():
     """Training function."""
-    t
+    trainer = gluon.Trainer(model.collect_params(), args.optimizer,
+                            {'learning_rate': args.lr, 'beta2': 0.98, 'epsilon': 1e-9})
+
+    train_data_loader, val_data_loader, test_data_loader \
+        = dataprocessor.make_dataloader(data_train, data_val, data_test, args,
+                                        use_average_length=True, num_shards=len(ctx))
+
+    if args.bleu == 'tweaked':
+        bpe = bool(args.dataset != 'IWSLT2015' and args.dataset != 'TOY')
+        split_compound_word = bpe
+        tokenized = True
+    elif args.bleu == '13a' or args.bleu == 'intl':
+        bpe = False
+        split_compound_word = False
+        tokenized = False
+    else:
+        raise NotImplementedError
+
+    best_valid_bleu = 0.0
+    step_num = 0
+    warmup_steps = args.warmup_steps
+    grad_interval = args.num_accumulated
+    model.collect_params().setattr('grad_req', 'add')
+    average_start = (len(train_data_loader) // grad_interval) * (args.epochs - args.average_start)
+    average_param_dict = None
+    model.collect_params().zero_grad()
+    parallel = Parallel(num_ctxs, parallel_model)
+    for epoch_id in range(args.epochs):
+        log_avg_loss = 0
+        log_wc = 0
+        loss_denom = 0
+        step_loss = 0
+        log_start_time = time.time()
+        for batch_id, seqs \
+                in enumerate(train_data_loader):
+            if batch_id % grad_interval == 0:
+                step_num += 1
+                new_lr = args.lr / math.sqrt(args.num_units) \
+                         * min(1. / math.sqrt(step_num), step_num * warmup_steps ** (-1.5))
+                trainer.set_learning_rate(new_lr)
+            src_wc, tgt_wc, bs = np.sum([(shard[2].sum(), shard[3].sum(), shard[0].shape[0])
+                                         for shard in seqs], axis=0)
+            seqs = [[seq.as_in_context(context) for seq in shard]
+                    for context, shard in zip(ctx, seqs)]
+            Ls = []
+            for seq in seqs:
+                parallel.put((seq, args.batch_size))
+            Ls = [parallel.get() for _ in range(len(ctx))]
+            src_wc = src_wc.asscalar()
+            tgt_wc = tgt_wc.asscalar()
+            loss_denom += tgt_wc - bs
+            if batch_id % grad_interva
