@@ -312,4 +312,39 @@ def train():
             src_wc = src_wc.asscalar()
             tgt_wc = tgt_wc.asscalar()
             loss_denom += tgt_wc - bs
-            if batch_id % grad_interva
+            if batch_id % grad_interval == grad_interval - 1 or\
+                    batch_id == len(train_data_loader) - 1:
+                if average_param_dict is None:
+                    average_param_dict = {k: v.data(ctx[0]).copy() for k, v in
+                                          model.collect_params().items()}
+                trainer.step(float(loss_denom) / args.batch_size / 100.0)
+                param_dict = model.collect_params()
+                param_dict.zero_grad()
+                if step_num > average_start:
+                    alpha = 1. / max(1, step_num - average_start)
+                    for name, average_param in average_param_dict.items():
+                        average_param[:] += alpha * (param_dict[name].data(ctx[0]) - average_param)
+            step_loss += sum([L.asscalar() for L in Ls])
+            if batch_id % grad_interval == grad_interval - 1 or\
+                    batch_id == len(train_data_loader) - 1:
+                log_avg_loss += step_loss / loss_denom * args.batch_size * 100.0
+                loss_denom = 0
+                step_loss = 0
+            log_wc += src_wc + tgt_wc
+            if (batch_id + 1) % (args.log_interval * grad_interval) == 0:
+                wps = log_wc / (time.time() - log_start_time)
+                logging.info('[Epoch {} Batch {}/{}] loss={:.4f}, ppl={:.4f}, '
+                             'throughput={:.2f}K wps, wc={:.2f}K'
+                             .format(epoch_id, batch_id + 1, len(train_data_loader),
+                                     log_avg_loss / args.log_interval,
+                                     np.exp(log_avg_loss / args.log_interval),
+                                     wps / 1000, log_wc / 1000))
+                log_start_time = time.time()
+                log_avg_loss = 0
+                log_wc = 0
+        mx.nd.waitall()
+        valid_loss, valid_translation_out = evaluate(val_data_loader, ctx[0])
+        valid_bleu_score, _, _, _, _ = compute_bleu([val_tgt_sentences], valid_translation_out,
+                                                    tokenized=tokenized, tokenizer=args.bleu,
+                                                    split_compound_word=split_compound_word,
+                                    
