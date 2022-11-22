@@ -381,4 +381,32 @@ def train():
                 for c in ctx:
                     v.data(c)[:] += alpha * (params[k].as_in_context(c) - v.data(c))
         save_path = os.path.join(args.save_dir,
-                                 'average_checkpoint_{}.params'.fo
+                                 'average_checkpoint_{}.params'.format(args.num_averages))
+        model.save_parameters(save_path)
+    elif args.average_start > 0:
+        for k, v in model.collect_params().items():
+            v.set_data(average_param_dict[k])
+        save_path = os.path.join(args.save_dir, 'average.params')
+        model.save_parameters(save_path)
+    else:
+        model.load_parameters(os.path.join(args.save_dir, 'valid_best.params'), ctx)
+    valid_loss, valid_translation_out = evaluate(val_data_loader, ctx[0])
+    valid_bleu_score, _, _, _, _ = compute_bleu([val_tgt_sentences], valid_translation_out,
+                                                tokenized=tokenized, tokenizer=args.bleu, bpe=bpe,
+                                                split_compound_word=split_compound_word)
+    logging.info('Best model valid Loss={:.4f}, valid ppl={:.4f}, valid bleu={:.2f}'
+                 .format(valid_loss, np.exp(valid_loss), valid_bleu_score * 100))
+    test_loss, test_translation_out = evaluate(test_data_loader, ctx[0])
+    test_bleu_score, _, _, _, _ = compute_bleu([test_tgt_sentences], test_translation_out,
+                                               tokenized=tokenized, tokenizer=args.bleu, bpe=bpe,
+                                               split_compound_word=split_compound_word)
+    logging.info('Best model test Loss={:.4f}, test ppl={:.4f}, test bleu={:.2f}'
+                 .format(test_loss, np.exp(test_loss), test_bleu_score * 100))
+    dataprocessor.write_sentences(valid_translation_out,
+                                  os.path.join(args.save_dir, 'best_valid_out.txt'))
+    dataprocessor.write_sentences(test_translation_out,
+                                  os.path.join(args.save_dir, 'best_test_out.txt'))
+
+
+if __name__ == '__main__':
+    train()
