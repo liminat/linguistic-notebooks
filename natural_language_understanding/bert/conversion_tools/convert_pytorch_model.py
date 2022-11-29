@@ -103,4 +103,51 @@ with open(os.path.join(args.pytorch_checkpoint_dir, 'bert_config.json'), 'r') as
 # BERT encoder
 encoder = BERTEncoder(attention_cell=predefined_args['attention_cell'],
                       num_layers=predefined_args['num_layers'], units=predefined_args['units'],
-                      hidden_size=predefined_args['hidden_
+                      hidden_size=predefined_args['hidden_size'],
+                      max_length=predefined_args['max_length'],
+                      num_heads=predefined_args['num_heads'], scaled=predefined_args['scaled'],
+                      dropout=predefined_args['dropout'],
+                      use_residual=predefined_args['use_residual'])
+
+# Infer enabled BERTModel components
+use_pooler = any('pooler' in n for n in pytorch_parameters)
+use_decoder = any('cls.predictions.transform.dense.weight' in n for n in pytorch_parameters)
+use_classifier = any('cls.seq_relationship.weight' in n for n in pytorch_parameters)
+
+if not use_classifier and 'classifier.weight' in pytorch_parameters and \
+   pytorch_parameters['classifier.weight'].shape[0] == 2:
+    logging.info('Assuming classifier weights in provided Pytorch model are '
+                 'from next sentence prediction task.')
+    use_classifier = True
+
+logging.info('Inferred that the pytorch model provides the following parameters:')
+logging.info('- use_pooler = {}'.format(use_pooler))
+logging.info('- use_decoder = {}'.format(use_decoder))
+logging.info('- use_classifier = {}'.format(use_classifier))
+
+# BERT model
+bert = BERTModel(encoder, len(vocab),
+                 token_type_vocab_size=predefined_args['token_type_vocab_size'],
+                 units=predefined_args['units'], embed_size=predefined_args['embed_size'],
+                 embed_dropout=predefined_args['embed_dropout'],
+                 word_embed=predefined_args['word_embed'], use_pooler=use_pooler,
+                 use_decoder=use_decoder, use_classifier=use_classifier)
+
+bert.initialize(init=mx.init.Normal(0.02))
+
+ones = mx.nd.ones((2, 8))
+out = bert(ones, ones, mx.nd.array([5, 6]), mx.nd.array([[1], [2]]))
+params = bert._collect_params_with_prefix()
+assert len(params) == len(pytorch_parameters), "Gluon model does not match PyTorch model. " \
+    "Please fix the BERTModel hyperparameters"
+
+# set parameter data
+loaded_params = {}
+for name in params:
+    if name not in mapping:
+        raise RuntimeError('Invalid json mapping file. '
+                           'The parameter {} is not described in the mapping file.'.format(name))
+    pytorch_name = mapping[name]
+    if pytorch_name not in pytorch_parameters.keys():
+        # Handle inconsistent naming in PyTorch
+        # The Expected names 
