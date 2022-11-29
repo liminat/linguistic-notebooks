@@ -150,4 +150,31 @@ for name in params:
     pytorch_name = mapping[name]
     if pytorch_name not in pytorch_parameters.keys():
         # Handle inconsistent naming in PyTorch
-        # The Expected names 
+        # The Expected names here are based on the PyTorch version of SciBert.
+        # The Inconsistencies were found in ClinicalBert
+        if 'LayerNorm' in pytorch_name:
+            pytorch_name = pytorch_name.replace('weight', 'gamma')
+            pytorch_name = pytorch_name.replace('bias', 'beta')
+            assert pytorch_name in pytorch_parameters.keys()
+
+        if 'cls.seq_relationship' in pytorch_name:
+            pytorch_name = pytorch_name.replace('cls.seq_relationship', 'classifier')
+
+    arr = mx.nd.array(pytorch_parameters[pytorch_name])
+
+    assert arr.shape == params[name].shape
+    params[name].set_data(arr)
+    loaded_params[name] = True
+
+if len(params) != len(loaded_params):
+    raise RuntimeError('The Gluon BERTModel comprises {} parameter arrays, '
+                       'but {} have been extracted from the pytorch model. '.format(
+                           len(params), len(loaded_params)))
+
+# param serialization
+bert.save_parameters(tmp_file_path)
+hash_full, hash_short = get_hash(tmp_file_path)
+gluon_param_path = os.path.expanduser(os.path.join(args.out_dir, hash_short + '.params'))
+logging.info('param saved to %s. hash = %s', gluon_param_path, hash_full)
+bert.save_parameters(gluon_param_path)
+mx.nd.waitall()
