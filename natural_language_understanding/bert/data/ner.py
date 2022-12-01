@@ -179,4 +179,61 @@ def load_segment(file_path, bert_tokenizer):
     logging.info('Loading sentences in %s...', file_path)
     bio2_sentences = remove_docstart_sentence(read_bio_as_bio2(file_path))
     bioes_sentences = [bio_bioes(sentence) for sentence in bio2_sentences]
-    subword_sentences = [bert_token
+    subword_sentences = [bert_tokenize_sentence(sentence, bert_tokenizer)
+                         for sentence in bioes_sentences]
+
+    logging.info('load %s, its max seq len: %d',
+                 file_path, max(len(sentence) for sentence in subword_sentences))
+
+    return subword_sentences
+
+
+class BERTTaggingDataset(object):
+    """
+
+    Parameters
+    ----------
+    text_vocab: gluon.nlp.Vocab
+        Vocabulary of text tokens/
+    train_path: Optional[str]
+        Path of the file to locate training data.
+    dev_path: Optional[str]
+        Path of the file to locate development data.
+    test_path: Optional[str]
+        Path of the file to locate test data.
+    seq_len: int
+        Length of the input sequence to BERT.
+    is_cased: bool
+        Whether to use cased model.
+    """
+
+    def __init__(self, text_vocab, train_path, dev_path, test_path, seq_len, is_cased,
+                 tag_vocab=None):
+        self.text_vocab = text_vocab
+        self.seq_len = seq_len
+
+        self.bert_tokenizer = nlp.data.BERTTokenizer(vocab=text_vocab, lower=not is_cased)
+
+        train_sentences = [] if train_path is None else load_segment(train_path,
+                                                                     self.bert_tokenizer)
+        dev_sentences = [] if dev_path is None else load_segment(dev_path, self.bert_tokenizer)
+        test_sentences = [] if test_path is None else load_segment(test_path, self.bert_tokenizer)
+        all_sentences = train_sentences + dev_sentences + test_sentences
+
+        if tag_vocab is None:
+            logging.info('Indexing tags...')
+            tag_counter = nlp.data.count_tokens(token.tag
+                                                for sentence in all_sentences for token in sentence)
+            self.tag_vocab = nlp.Vocab(tag_counter, padding_token=NULL_TAG,
+                                       bos_token=None, eos_token=None, unknown_token=None)
+        else:
+            self.tag_vocab = tag_vocab
+        self.null_tag_index = self.tag_vocab[NULL_TAG]
+
+        if len(test_sentences) > 0:
+            logging.info('example test sentences:')
+            for i in range(10):
+                logging.info(str(test_sentences[i]))
+
+        self.train_inputs = [self._encode_as_input(sentence) for sentence in train_sentences]
+        sel
