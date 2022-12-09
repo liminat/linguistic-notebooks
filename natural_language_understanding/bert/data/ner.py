@@ -347,4 +347,11 @@ def convert_arrays_to_text(text_vocab, tag_vocab,
             if true_tag == NULL_TAG:
                 last_entry = entries[-1]
                 entries[-1] = PredictedToken(text=last_entry.text + token_text,
-                                             true
+                                             true_tag=last_entry.true_tag,
+                                             pred_tag=last_entry.pred_tag)
+            else:
+                entries.append(PredictedToken(text=token_text,
+                                              true_tag=true_tag, pred_tag=pred_tag))
+
+        predictions.append(entries)
+    return predictions
