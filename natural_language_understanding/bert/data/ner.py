@@ -285,4 +285,66 @@ class BERTTaggingDataset(object):
         token_types = [0] * self.seq_len
 
         np_tag_ids = np.array(padded_tag_ids, dtype='int32')
-        # gluon batchify cannot batchify numpy.bool
+        # gluon batchify cannot batchify numpy.bool? :(
+        flag_nonnull_tag = (np_tag_ids != self.null_tag_index).astype('int32')
+
+        return (np.array(padded_text_ids, dtype='int32'),
+                np.array(token_types, dtype='int32'),
+                np.array(valid_length, dtype='int32'),
+                np_tag_ids,
+                flag_nonnull_tag)
+
+    @staticmethod
+    def _get_data_loader(inputs, shuffle, batch_size):
+        return mx.gluon.data.DataLoader(inputs, batch_size=batch_size, shuffle=shuffle,
+                                        last_batch='keep')
+
+    def get_train_data_loader(self, batch_size):
+        return self._get_data_loader(self.train_inputs, shuffle=True, batch_size=batch_size)
+
+    def get_dev_data_loader(self, batch_size):
+        return self._get_data_loader(self.dev_inputs, shuffle=False, batch_size=batch_size)
+
+    def get_test_data_loader(self, batch_size):
+        return self._get_data_loader(self.test_inputs, shuffle=False, batch_size=batch_size)
+
+    @property
+    def num_tag_types(self):
+        """Returns the number of unique tags.
+
+        Returns
+        -------
+        int: number of tag types.
+        """
+        return len(self.tag_vocab)
+
+
+def convert_arrays_to_text(text_vocab, tag_vocab,
+                           np_text_ids, np_true_tags, np_pred_tags, np_valid_length):
+    """Convert numpy array data into text
+
+    Parameters
+    ----------
+    np_text_ids: token text ids (batch_size, seq_len)
+    np_true_tags: tag_ids (batch_size, seq_len)
+    np_pred_tags: tag_ids (batch_size, seq_len)
+    np.array: valid_length (batch_size,) the number of tokens until [SEP] token
+
+    Returns
+    -------
+    List[List[PredictedToken]]:
+
+    """
+    predictions = []
+    for sample_index in range(np_valid_length.shape[0]):
+        sample_len = np_valid_length[sample_index]
+        entries = []
+        for i in range(1, sample_len - 1):
+            token_text = text_vocab.idx_to_token[np_text_ids[sample_index, i]]
+            true_tag = tag_vocab.idx_to_token[int(np_true_tags[sample_index, i])]
+            pred_tag = tag_vocab.idx_to_token[int(np_pred_tags[sample_index, i])]
+            # we don't need to predict on NULL tags
+            if true_tag == NULL_TAG:
+                last_entry = entries[-1]
+                entries[-1] = PredictedToken(text=last_entry.text + token_text,
+                                             true
