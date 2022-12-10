@@ -127,4 +127,59 @@ class SQuADTransform(object):
     - Convert from gluonnlp.data.SQuAD's record to SquadExample.
     - Tokenize the question_text in the example.
     - For examples where the document is too long,
-      use a sliding window to split into multiple fe
+      use a sliding window to split into multiple features and
+      record whether each token is a maximum context.
+    - Tokenize the split document chunks.
+    - Combine the token of question_text with the token
+      of the document and insert [CLS] and [SEP].
+    - Generate the start position and end position of the answer.
+    - Generate valid length.
+
+    E.g:
+
+    Inputs:
+
+        question_text: 'When did BBC Japan begin broadcasting?'
+        doc_tokens: ['BBC','Japan','was','a','general','entertainment','channel,',
+                    'which','operated','between','December','2004','and','April',
+                    '2006.','It','ceased','operations','after','its','Japanese',
+                    'distributor','folded.']
+        start_position: 10
+        end_position: 11
+        orig_answer_text: 'December 2004'
+
+    Processed:
+
+        tokens: ['[CLS]','when','did','bbc','japan','begin','broadcasting','?',
+                '[SEP]','bbc','japan','was','a','general','entertainment','channel',
+                ',','which','operated','between','december','2004','and','april',
+                '2006','.','it','ceased','operations','after','its','japanese',
+                'distributor','folded','.','[SEP]']
+        segment_ids: [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,
+                      1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        start_position: 20
+        end_position: 21
+        valid_length: 36
+
+    Because of the sliding window approach taken to scoring documents, a single
+    token can appear in multiple documents.
+    So you need to record whether each token is a maximum context. E.g.
+       Doc: the man went to the store and bought a gallon of milk
+       Span A: the man went to the
+       Span B: to the store and bought
+       Span C: and bought a gallon of
+       ...
+
+    Now the word 'bought' will have two scores from spans B and C. We only
+    want to consider the score with "maximum context", which we define as
+    the *minimum* of its left and right context (the *sum* of left and
+    right context will always be the same, of course).
+
+    In the example the maximum context for 'bought' would be span C since
+    it has 1 left context and 3 right context, while span B has 4 left context
+    and 0 right context.
+
+    Parameters
+    ----------
+    tokenizer : BERTTokenizer.
+        Tokenizer for the sentenc
