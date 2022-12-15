@@ -182,4 +182,71 @@ class SQuADTransform(object):
     Parameters
     ----------
     tokenizer : BERTTokenizer.
-        Tokenizer for the sentenc
+        Tokenizer for the sentences.
+    labels : list of int.
+        List of all label ids for the classification task.
+    max_seq_length : int, default 384
+        Maximum sequence length of the sentences.
+    doc_stride : int, default 128
+        When splitting up a long document into chunks,
+        how much stride to take between chunks.
+    max_query_length : int, default 64
+        The maximum length of the query tokens.
+    is_pad : bool, default True
+        Whether to pad the sentences to maximum length.
+    is_training : bool, default True
+        Whether to run training.
+    do_lookup : bool, default True
+        Whether to do vocabulary lookup for convert tokens to indices.
+    """
+
+    def __init__(self,
+                 tokenizer,
+                 max_seq_length=384,
+                 doc_stride=128,
+                 max_query_length=64,
+                 is_pad=True,
+                 is_training=True,
+                 do_lookup=True):
+        self.tokenizer = tokenizer
+        self.max_seq_length = max_seq_length
+        self.max_query_length = max_query_length
+        self.doc_stride = doc_stride
+        self.is_pad = is_pad
+        self.is_training = is_training
+        self.do_lookup = do_lookup
+
+    def _is_whitespace(self, c):
+        if c == ' ' or c == '\t' or c == '\r' or c == '\n' or ord(
+                c) == 0x202F:
+            return True
+        return False
+
+    def _toSquadExample(self, record):
+        example_id = record[0]
+        qas_id = record[1]
+        question_text = record[2]
+        paragraph_text = record[3]
+        orig_answer_text = record[4][0] if record[4] else ''
+        answer_offset = record[5][0] if record[5] else ''
+        is_impossible = record[6] if len(record) == 7 else False
+
+        doc_tokens = []
+
+        char_to_word_offset = []
+        prev_is_whitespace = True
+        for c in paragraph_text:
+            if self._is_whitespace(c):
+                prev_is_whitespace = True
+            else:
+                if prev_is_whitespace:
+                    doc_tokens.append(c)
+                else:
+                    doc_tokens[-1] += c
+                prev_is_whitespace = False
+            char_to_word_offset.append(len(doc_tokens) - 1)
+
+        start_position = -1
+        end_position = -1
+
+        if self
