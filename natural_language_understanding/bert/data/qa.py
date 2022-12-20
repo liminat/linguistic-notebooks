@@ -249,4 +249,60 @@ class SQuADTransform(object):
         start_position = -1
         end_position = -1
 
-        if self
+        if self.is_training:
+            if not is_impossible:
+                answer_length = len(orig_answer_text)
+                start_position = char_to_word_offset[answer_offset]
+                end_position = char_to_word_offset[
+                    answer_offset + answer_length - 1]
+                # Only add answers where the text can be exactly recovered from the
+                # document. If this CAN'T happen it's likely due to weird Unicode
+                # stuff so we will just skip the example.
+                #
+                # Note that this means for training mode, every example is NOT
+                # guaranteed to be preserved.
+                actual_text = ' '.join(
+                    doc_tokens[start_position:(end_position + 1)])
+                cleaned_answer_text = ' '.join(
+                    whitespace_splitter(orig_answer_text.strip()))
+                if actual_text.find(cleaned_answer_text) == -1:
+                    print('Could not find answer: %s vs. %s' %
+                          (actual_text, cleaned_answer_text))
+                    return None
+            else:
+                start_position = -1
+                end_position = -1
+                orig_answer_text = ''
+
+        example = SquadExample(
+            qas_id=qas_id,
+            question_text=question_text,
+            doc_tokens=doc_tokens,
+            example_id=example_id,
+            orig_answer_text=orig_answer_text,
+            start_position=start_position,
+            end_position=end_position,
+            is_impossible=is_impossible)
+        return example
+
+    def _transform(self, *record):
+        example = self._toSquadExample(record)
+        if not example:
+            return None
+
+        padding = self.tokenizer.vocab.padding_token
+        if self.do_lookup:
+            padding = self.tokenizer.vocab[padding]
+        features = []
+        query_tokens = self.tokenizer(example.question_text)
+
+        if len(query_tokens) > self.max_query_length:
+            query_tokens = query_tokens[0:self.max_query_length]
+
+        tok_to_orig_index = []
+        orig_to_tok_index = []
+        all_doc_tokens = []
+        for (i, token) in enumerate(example.doc_tokens):
+            orig_to_tok_index.append(len(all_doc_tokens))
+            sub_tokens = self.tokenizer(token)
+            
