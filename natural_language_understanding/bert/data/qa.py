@@ -354,4 +354,55 @@ class SQuADTransform(object):
             for token in query_tokens:
                 tokens.append(token)
                 segment_ids.append(0)
-            tokens.append(self.
+            tokens.append(self.tokenizer.vocab.sep_token)
+            segment_ids.append(0)
+
+            for i in range(doc_span.length):
+                split_token_index = doc_span.start + i
+                token_to_orig_map[len(
+                    tokens)] = tok_to_orig_index[split_token_index]
+
+                is_max_context = _check_is_max_context(
+                    doc_spans, doc_span_index, split_token_index)
+                token_is_max_context[len(tokens)] = is_max_context
+                tokens.append(all_doc_tokens[split_token_index])
+                segment_ids.append(1)
+            tokens.append(self.tokenizer.vocab.sep_token)
+            segment_ids.append(1)
+
+            if self.do_lookup:
+                input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+            else:
+                input_ids = tokens
+
+            # The mask has 1 for real tokens and 0 for padding tokens. Only real
+            # tokens are attended to.
+            valid_length = len(input_ids)
+
+            # Zero-pad up to the sequence length.
+            if self.is_pad:
+                while len(input_ids) < self.max_seq_length:
+                    input_ids.append(padding)
+                    segment_ids.append(padding)
+
+                assert len(input_ids) == self.max_seq_length
+                assert len(segment_ids) == self.max_seq_length
+
+            start_position = 0
+            end_position = 0
+            if self.is_training and not example.is_impossible:
+                # For training, if our document chunk does not contain an annotation
+                # we throw it out, since there is nothing to predict.
+                doc_start = doc_span.start
+                doc_end = doc_span.start + doc_span.length - 1
+                out_of_span = False
+                if not (tok_start_position >= doc_start
+                        and tok_end_position <= doc_end):
+                    out_of_span = True
+                if out_of_span:
+                    start_position = 0
+                    end_position = 0
+                else:
+                    doc_offset = len(query_tokens) + 2
+                    start_position = tok_start_position - doc_start + doc_offset
+                    end_position = tok_end_position - doc_start 
