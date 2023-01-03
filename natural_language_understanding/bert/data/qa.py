@@ -405,4 +405,56 @@ class SQuADTransform(object):
                 else:
                     doc_offset = len(query_tokens) + 2
                     start_position = tok_start_position - doc_start + doc_offset
-                    end_position = tok_end_position - doc_start 
+                    end_position = tok_end_position - doc_start + doc_offset
+
+            if self.is_training and example.is_impossible:
+                start_position = 0
+                end_position = 0
+
+            features.append(SQuADFeature(example_id=example.example_id,
+                                         qas_id=example.qas_id,
+                                         doc_tokens=example.doc_tokens,
+                                         doc_span_index=doc_span_index,
+                                         tokens=tokens,
+                                         token_to_orig_map=token_to_orig_map,
+                                         token_is_max_context=token_is_max_context,
+                                         input_ids=input_ids,
+                                         valid_length=valid_length,
+                                         segment_ids=segment_ids,
+                                         start_position=start_position,
+                                         end_position=end_position,
+                                         is_impossible=example.is_impossible))
+        return features
+
+    def __call__(self, record):
+        examples = self._transform(*record)
+        if not examples:
+            return None
+        features = []
+
+        for _example in examples:
+            feature = []
+            feature.append(_example.example_id)
+            feature.append(_example.input_ids)
+            feature.append(_example.segment_ids)
+            feature.append(_example.valid_length)
+            feature.append(_example.start_position)
+            feature.append(_example.end_position)
+            feature.append(len(_example.input_ids))
+            features.append(feature)
+
+        return features
+
+
+def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
+                         orig_answer_text):
+    """Returns tokenized answer spans that better match the annotated answer."""
+
+    # The SQuAD annotations are character based. We first project them to
+    # whitespace-tokenized words. But then after WordPiece tokenization, we can
+    # often find a "better match". For example:
+    #
+    #   Question: What year was John Smith born?
+    #   Context: The leader was John Smith (1895-1943).
+    #   Answer: 1895
+   
