@@ -73,4 +73,59 @@ parser.add_argument('--dataset_name',
                              'wiki_multilingual_uncased', 'wiki_multilingual_cased',
                              'wiki_cn_cased'],
                     help='BERT dataset name. Options include '
-                         '"book_corpus_wiki_en_uncased", "book_c
+                         '"book_corpus_wiki_en_uncased", "book_corpus_wiki_en_cased", '
+                         '"wiki_multilingual_uncased", "wiki_multilingual_cased", '
+                         '"wiki_cn_cased"')
+
+parser.add_argument('--output_dir',
+                    type=str,
+                    default='./output_dir',
+                    help='The directory where the exported model symbol will be created. '
+                         'The default is ./output_dir')
+
+parser.add_argument('--seq_length',
+                    type=int,
+                    default=384,
+                    help='The maximum total input sequence length after WordPiece tokenization.'
+                         'Sequences longer than this needs to be truncated, and sequences shorter '
+                         'than this needs to be padded. Default is 384')
+
+parser.add_argument('--dropout',
+                    type=float,
+                    default=0.1,
+                    help='The dropout probability for the classification/regression head.')
+
+args = parser.parse_args()
+
+# create output dir
+output_dir = args.output_dir
+nlp.utils.mkdir(output_dir)
+
+###############################################################################
+#                                Logging                                      #
+###############################################################################
+
+log = logging.getLogger('gluonnlp')
+log.setLevel(logging.DEBUG)
+formatter = logging.Formatter(fmt='%(levelname)s:%(name)s:%(asctime)s %(message)s',
+                              datefmt='%H:%M:%S')
+fh = logging.FileHandler(os.path.join(args.output_dir, 'hybrid_export_bert.log'), mode='w')
+fh.setLevel(logging.INFO)
+fh.setFormatter(formatter)
+console = logging.StreamHandler()
+console.setLevel(logging.INFO)
+console.setFormatter(formatter)
+log.addHandler(console)
+log.addHandler(fh)
+log.info(args)
+
+###############################################################################
+#                              Hybridize the model                            #
+###############################################################################
+
+seq_length = args.seq_length
+
+if args.task == 'classification':
+    bert, _ = get_hybrid_model(
+        name=args.model_name,
+        dataset_name=args.
