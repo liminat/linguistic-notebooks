@@ -128,4 +128,68 @@ seq_length = args.seq_length
 if args.task == 'classification':
     bert, _ = get_hybrid_model(
         name=args.model_name,
-        dataset_name=args.
+        dataset_name=args.dataset_name,
+        pretrained=False,
+        use_pooler=True,
+        use_decoder=False,
+        use_classifier=False,
+        seq_length=args.seq_length)
+    net = HybridBERTClassifier(bert, num_classes=2, dropout=args.dropout)
+elif args.task == 'regression':
+    bert, _ = get_hybrid_model(
+        name=args.model_name,
+        dataset_name=args.dataset_name,
+        pretrained=False,
+        use_pooler=True,
+        use_decoder=False,
+        use_classifier=False,
+        seq_length=args.seq_length)
+    net = HybridBERTRegression(bert, dropout=args.dropout)
+elif args.task == 'question_answering':
+    bert, _ = get_hybrid_model(
+        name=args.model_name,
+        dataset_name=args.dataset_name,
+        pretrained=False,
+        use_pooler=False,
+        use_decoder=False,
+        use_classifier=False,
+        seq_length=args.seq_length)
+    net = HybridBERTForQA(bert)
+else:
+    raise ValueError('unknown task: %s'%args.task)
+
+if args.model_parameters:
+    net.load_parameters(args.model_parameters)
+else:
+    net.initialize()
+    warnings.warn('--model_parameters is not provided. The parameter checkpoint (.params) '
+                  'file will be created based on default parameter intialization.')
+
+net.hybridize(static_alloc=True, static_shape=True)
+
+###############################################################################
+#                            Prepare dummy input data                         #
+###############################################################################
+
+test_batch_size = 1
+
+inputs = mx.nd.arange(test_batch_size * seq_length)
+inputs = inputs.reshape(shape=(test_batch_size, seq_length))
+token_types = mx.nd.zeros_like(inputs)
+valid_length = mx.nd.arange(test_batch_size)
+batch = inputs, token_types, valid_length
+
+def export(batch, prefix):
+    """Export the model."""
+    log.info('Exporting the model ... ')
+    inputs, token_types, valid_length = batch
+    net(inputs, token_types, valid_length)
+    net.export(prefix, epoch=0)
+    assert os.path.isfile(prefix + '-symbol.json')
+    assert os.path.isfile(prefix + '-0000.params')
+
+def infer(batch, prefix):
+    """Evaluate the model on a mini-batch."""
+    log.info('Start inference ... ')
+
+    # import with SymbolBlock. Alternatively, you can use Module.load AP
