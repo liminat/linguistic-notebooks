@@ -104,4 +104,53 @@ To get the score of the dev data, you need to download the dev dataset (`dev-v2.
 BERT Pre-training
 ~~~~~~~~~~~~~~~~~
 
-We also provide scripts for pre-training BERT with m
+We also provide scripts for pre-training BERT with masked language modeling and and next sentence prediction.
+
+The pre-training data format expects: (1) One sentence per line. These should ideally be actual sentences, not entire paragraphs or arbitrary spans of text for the "next sentence prediction" task. (2) Blank lines between documents. You can find a sample pre-training text with 3 documents `here <https://github.com/dmlc/gluon-nlp/blob/master/scripts/bert/sample_text.txt>`__. You can perform sentence segmentation with an off-the-shelf NLP toolkit such as NLTK.
+
+Pre-requisite
++++++++++++++
+
+We recommend horovod for scalable multi-gpu multi-machine training.
+
+To install horovod, you need:
+
+- `NCCL <https://developer.nvidia.com/nccl>`__, and
+- `OpenMPI <https://www.open-mpi.org/software/ompi/v4.0/>`__
+
+Then you can install horovod via the following command:
+
+.. code-block:: console
+
+    $ HOROVOD_WITH_MXNET=1 HOROVOD_GPU_ALLREDUCE=NCCL pip install horovod==0.16.2 --user --no-cache-dir
+
+Run Pre-training
+++++++++++++++++
+
+You can use the following command to run pre-training with 2 hosts, 8 GPUs each:
+
+.. code-block:: console
+
+    $ mpirun -np 16 -H host0_ip:8,host1_ip:8 -mca pml ob1 -mca btl ^openib \
+             -mca btl_tcp_if_exclude docker0,lo --map-by ppr:4:socket \
+             --mca plm_rsh_agent 'ssh -q -o StrictHostKeyChecking=no' \
+             -x NCCL_MIN_NRINGS=8 -x NCCL_DEBUG=INFO -x HOROVOD_HIERARCHICAL_ALLREDUCE=1 \
+             -x MXNET_SAFE_ACCUMULATION=1 --tag-output \
+             python run_pretraining_hvd.py --data='folder1/*.txt,folder2/*.txt,' \
+             --data_eval='dev_folder/*.txt,' --num_steps 1000000 \
+             --lr 1e-4 --batch_size 4096 --accumulate 4 --use_avg_len --raw
+
+Note that the batch_size argument sets the per-GPU batch size. When multiple hosts are present, please make sure you can ssh to these nodes without password.
+
+Custom Vocabulary
++++++++++++++++++
+
+The pre-training script supports subword tokenization with a custom vocabulary using `sentencepiece <https://github.com/google/sentencepiece>`__.
+
+To install sentencepiece, run:
+
+.. code-block:: console
+
+    $ pip install sentencepiece==0.1.82 --user
+
+You can `train <//github.com/google/sentencepiece/tree/v0.1.82/python#model-training>`__ a custom sentencepi
