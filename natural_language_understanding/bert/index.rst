@@ -153,4 +153,44 @@ To install sentencepiece, run:
 
     $ pip install sentencepiece==0.1.82 --user
 
-You can `train <//github.com/google/sentencepiece/tree/v0.1.82/python#model-training>`__ a custom sentencepi
+You can `train <//github.com/google/sentencepiece/tree/v0.1.82/python#model-training>`__ a custom sentencepiece vocabulary by specifying the vocabulary size:
+
+.. code-block:: python
+
+    import sentencepiece as spm
+    spm.SentencePieceTrainer.Train('--input=a.txt,b.txt --model_prefix=my_vocab --vocab_size=30000 --model_type BPE')
+
+To use sentencepiece vocab for pre-training, please set --sentencepiece=my_vocab.model when using run_pretraining_hvd.py.
+
+Improve Training Speed
+++++++++++++++++++++++
+
+The `create_pretraining_data.py` file generates pre-training data from raw text documents, stored as npz files. They help reduce data loading overhead and improves training speed.
+
+.. code-block:: console
+
+    $ python create_pretraining_data.py --input_file folder1/*.txt,folder2/*.txt --output_dir out --dataset_name book_corpus_wiki_en_uncased --dupe_factor 10 --num_workers $(nproc)
+
+Optionally, if you are using a custom sentencepiece vocab to generate pre-training data, please set --sentencepiece=my_vocab.model.
+
+To use the generated npz files for pre-training, remove the **--raw** argument, and update the argument for **--data** and **--data_eval** with the paths to the npz files when using run_pretraining_hvd.py.
+
+Run without Horovod
++++++++++++++++++++
+
+Alternatively, if horovod is not available, you could run pre-training with the MXNet native parameter server. As of now, the training script only supports pre-generated data.
+
+.. code-block:: console
+
+    $ MXNET_SAFE_ACCUMULATION=1 python run_pretraining.py --gpus 0,1,2,3,4,5,6,7 --batch_size 4096 --accumulate 4 --lr 1e-4 \
+                                                          --data '/path/to/generated/train/*.npz' --num_steps 1000000 --use_avg_len \
+                                                          --log_interval=250 --data_eval '/path/to/generated/dev/*.npz'
+
+The BERT base model produced by gluonnlp pre-training script (`log <https://raw.githubusercontent.com/dmlc/web-data/master/gluonnlp/logs/bert/bert_base_pretrain.log>`__) achieves 83.6% on MNLI-mm, 93% on SST-2, 87.99% on MRPC and 80.99/88.60 on SQuAD 1.1 validation set on the books corpus and English wikipedia dataset.
+
+BERT for Named Entity Recognition
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+GluonNLP provides training and prediction script for named entity recognition models.
+
+The
