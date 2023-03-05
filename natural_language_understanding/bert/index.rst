@@ -193,4 +193,47 @@ BERT for Named Entity Recognition
 
 GluonNLP provides training and prediction script for named entity recognition models.
 
-The
+The training script for NER requires python3 and the seqeval package:
+
+.. code-block:: console
+
+    $ pip3 install seqeval --user
+
+Dataset should be formatted in `CoNLL-2003 shared task format <https://www.clips.uantwerpen.be/conll2003/ner/>`_.
+Assuming data files are located in `${DATA_DIR}`, below command trains BERT model for
+named entity recognition, and saves model artifacts to `${MODEL_DIR}` with `large_bert`
+prefix in file names:
+
+.. code-block:: console
+
+    $ python3 finetune_ner.py \
+        --train-path ${DATA_DIR}/train.txt \
+        --dev-path ${DATA_DIR}/dev.txt \
+        --test-path ${DATA_DIR}/test.txt
+        --gpu 0 --learning-rate 1e-5 --dropout-prob 0.1 --num-epochs 100 --batch-size 8 \
+        --optimizer bertadam --bert-model bert_24_1024_16 \
+        --save-checkpoint-prefix ${MODEL_DIR}/large_bert --seed 13531
+
+This achieves Test F1 from `91.5` to `92.2` (`log <https://github.com/dmlc/web-data/blob/master/gluonnlp/logs/bert/finetuned_conll2003.log>`_).
+
+Export BERT for Deployment
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Current export/export.py support exporting BERT models. Supported values for --task argument include classification, regression and question_answering.
+
+.. code-block:: console
+
+    $ python export/export.py --task classification --model_parameters /path/to/saved/ckpt.params --output_dir /path/to/output/dir/ --seq_length 128
+
+This will export the BERT model for classification to a symbol.json file, saved to the directory specified by --output_dir.
+The --model_parameters argument is optional. If not set, the .params file saved in the output directory will be randomly intialized parameters.
+
+BERT for Sentence or Tokens Embedding
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The goal of this BERT Embedding is to obtain the token embedding from BERT's pre-trained model. In this way, instead of building and do fine-tuning for an end-to-end NLP model, you can build your model by just utilizing the token embeddings. You can use the command line interface below:
+
+.. code-block:: shell
+
+    python bert/embedding.py --sentences "GluonNLP is a toolkit that enables easy text preprocessing, datasets loading and neural models building to help you speed up your Natural Language Processing (NLP) research."
+    Text: GluonNLP is a toolkit that enables easy text preprocessing, datasets loading an
