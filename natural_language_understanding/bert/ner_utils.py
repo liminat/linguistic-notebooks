@@ -69,4 +69,42 @@ def str2bool(v):
     """
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
-    elif v.lower() in ('no', 'false',
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def get_bert_dataset_name(is_cased):
+    """Returns relevant BERT dataset name, depending on whether we are using a cased model.
+
+    Parameters
+    ----------
+    is_cased: bool
+        Whether we are using a cased model.
+
+    Returns
+    -------
+    str: Named of the BERT dataset.
+
+    """
+    if is_cased:
+        return 'book_corpus_wiki_en_cased'
+    else:
+        return 'book_corpus_wiki_en_uncased'
+
+
+def get_bert_model(bert_model, cased, ctx, dropout_prob):
+    """Get pre-trained BERT model."""
+    bert_dataset_name = get_bert_dataset_name(cased)
+
+    return nlp.model.get_model(
+        name=bert_model,
+        dataset_name=bert_dataset_name,
+        pretrained=True,
+        ctx=ctx,
+        use_pooler=False,
+        use_decoder=False,
+        use_classifier=False,
+        dropout=dropout_prob,
+        embed_dropout=dropout_prob)
