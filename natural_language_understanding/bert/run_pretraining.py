@@ -77,4 +77,58 @@ class ParallelBERT(nlp.utils.Parallelizable):
         """forward backward implementation"""
         with mx.autograd.record():
             (ls, next_sentence_label, classified, masked_id, decoded, \
-             masked_weight, ls1, ls2, valid_length) = fo
+             masked_weight, ls1, ls2, valid_length) = forward(x, self._model, self._mlm_loss,
+                                                              self._nsp_loss, self._vocab_size,
+                                                              args.dtype)
+            ls = ls / self._rescale_factor
+        if args.dtype == 'float16':
+            self._trainer.backward(ls)
+        else:
+            ls.backward()
+        return ls, next_sentence_label, classified, masked_id, decoded, \
+               masked_weight, ls1, ls2, valid_length
+
+def train(data_train, model, nsp_loss, mlm_loss, vocab_size, ctx, store):
+    """Training function."""
+    mlm_metric = nlp.metric.MaskedAccuracy()
+    nsp_metric = nlp.metric.MaskedAccuracy()
+    mlm_metric.reset()
+    nsp_metric.reset()
+
+    lr = args.lr
+    optim_params = {'learning_rate': lr, 'epsilon': 1e-6, 'wd': 0.01}
+    if args.dtype == 'float16':
+        optim_params['multi_precision'] = True
+
+    trainer = mx.gluon.Trainer(model.collect_params(), 'bertadam', optim_params,
+                               update_on_kvstore=False, kvstore=store)
+    dynamic_loss_scale = args.dtype == 'float16'
+    fp16_trainer = FP16Trainer(trainer, dynamic_loss_scale=dynamic_loss_scale)
+
+    if args.start_step:
+        state_path = os.path.join(args.ckpt_dir, '%07d.states.%02d'%(args.start_step, 0))
+        logging.info('Loading trainer state from %s', state_path)
+        nlp.utils.load_states(trainer, state_path)
+
+    accumulate = args.accumulate
+    num_train_steps = args.num_steps
+    warmup_ratio = args.warmup_ratio
+    num_warmup_steps = int(num_train_steps * warmup_ratio)
+    params = [p for p in model.collect_params().values() if p.grad_req != 'null']
+    param_dict = model.collect_params()
+
+    # Do not apply weight decay on LayerNorm and bias terms
+    for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
+        v.wd_mult = 0.0
+    if accumulate > 1:
+        for p in params:
+            p.grad_req = 'add'
+
+    train_begin_time = time.time()
+    begin_time = time.time()
+    running_mlm_loss = running_nsp_loss = running_num_tks = 0
+    batch_num = 0
+    step_num = args.start_step
+
+    parallel_model = ParallelBERT(model, mlm_loss, nsp_loss, vocab_size,
+         
