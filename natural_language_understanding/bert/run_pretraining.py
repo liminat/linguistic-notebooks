@@ -131,4 +131,51 @@ def train(data_train, model, nsp_loss, mlm_loss, vocab_size, ctx, store):
     step_num = args.start_step
 
     parallel_model = ParallelBERT(model, mlm_loss, nsp_loss, vocab_size,
-         
+                                  store.num_workers * accumulate, trainer=fp16_trainer)
+    num_ctxes = len(ctx)
+    parallel = nlp.utils.Parallel(num_ctxes if num_ctxes > 1 else 0, parallel_model)
+
+    while step_num < num_train_steps:
+        for _, dataloader in enumerate(data_train):
+            if step_num >= num_train_steps:
+                break
+
+            # create dummy data loader if needed
+            if args.dummy_data_len:
+                target_shape = (args.batch_size*num_ctxes, args.dummy_data_len)
+                dataloader = get_dummy_dataloader(dataloader, target_shape)
+
+            for _, data_batch in enumerate(dataloader):
+                if step_num >= num_train_steps:
+                    break
+                if batch_num % accumulate == 0:
+                    step_num += 1
+                    # if accumulate > 1, grad_req is set to 'add', and zero_grad is required
+                    if accumulate > 1:
+                        param_dict.zero_grad()
+                    # update learning rate
+                    if step_num <= num_warmup_steps:
+                        new_lr = lr * step_num / num_warmup_steps
+                    else:
+                        offset = lr * step_num / num_train_steps
+                        new_lr = lr - offset
+                    trainer.set_learning_rate(new_lr)
+                    if args.profile:
+                        profile(step_num, 10, 12, profile_name=args.profile)
+                if args.use_avg_len:
+                    data_list = [[seq.as_in_context(context) for seq in shard]
+                                 for context, shard in zip(ctx, data_batch)]
+                else:
+                    if data_batch[0].shape[0] < len(ctx):
+                        continue
+                    data_list = split_and_load(data_batch, ctx)
+
+                ns_label_list, ns_pred_list = [], []
+                mask_label_list, mask_pred_list, mask_weight_list = [], [], []
+
+                # parallel forward / backward
+                for data in data_list:
+                    parallel.put(data)
+                for _ in range(len(ctx)):
+                    (_, next_sentence_label, classified, masked_id,
+                     decoded, masked_we
