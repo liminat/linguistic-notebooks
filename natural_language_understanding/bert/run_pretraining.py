@@ -178,4 +178,48 @@ def train(data_train, model, nsp_loss, mlm_loss, vocab_size, ctx, store):
                     parallel.put(data)
                 for _ in range(len(ctx)):
                     (_, next_sentence_label, classified, masked_id,
-                     decoded, masked_we
+                     decoded, masked_weight, ls1, ls2, valid_length) = parallel.get()
+                    ns_label_list.append(next_sentence_label)
+                    ns_pred_list.append(classified)
+                    mask_label_list.append(masked_id)
+                    mask_pred_list.append(decoded)
+                    mask_weight_list.append(masked_weight)
+                    running_mlm_loss += ls1.as_in_context(mx.cpu()) / num_ctxes
+                    running_nsp_loss += ls2.as_in_context(mx.cpu()) / num_ctxes
+                    running_num_tks += valid_length.sum().as_in_context(mx.cpu())
+
+                # update
+                if (batch_num + 1) % accumulate == 0:
+                    fp16_trainer.step(1, max_norm=1)
+                nsp_metric.update(ns_label_list, ns_pred_list)
+                mlm_metric.update(mask_label_list, mask_pred_list, mask_weight_list)
+                # logging
+                if (step_num + 1) % (args.log_interval) == 0 and (batch_num + 1) % accumulate == 0:
+                    log(begin_time, running_num_tks, running_mlm_loss / accumulate,
+                        running_nsp_loss / accumulate, step_num, mlm_metric,
+                        nsp_metric, trainer, args.log_interval)
+                    begin_time = time.time()
+                    running_mlm_loss = running_nsp_loss = running_num_tks = 0
+                    mlm_metric.reset_local()
+                    nsp_metric.reset_local()
+
+                # saving checkpoints
+                if (step_num + 1) % args.ckpt_interval == 0 \
+                   and (batch_num + 1) % accumulate == 0 and store.rank == 0:
+                    save_states(step_num, trainer, args.ckpt_dir)
+                    save_parameters(step_num, model, args.ckpt_dir)
+                batch_num += 1
+    if store.rank == 0:
+        save_states(step_num, trainer, args.ckpt_dir)
+        save_parameters(step_num, model, args.ckpt_dir)
+    mx.nd.waitall()
+    train_end_time = time.time()
+    logging.info('Train cost={:.1f}s'.format(train_end_time - train_begin_time))
+
+if __name__ == '__main__':
+    ctx = [mx.cpu()] if args.gpus is None or args.gpus == '' else \
+          [mx.gpu(int(x)) for x in args.gpus.split(',')]
+
+    model, nsp_loss, mlm_loss, vocab = get_model_loss(ctx, args.model, args.pretrained,
+                                                      args.dataset_name, None, args.dtype,
+              
