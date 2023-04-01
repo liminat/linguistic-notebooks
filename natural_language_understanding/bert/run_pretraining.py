@@ -222,4 +222,24 @@ if __name__ == '__main__':
 
     model, nsp_loss, mlm_loss, vocab = get_model_loss(ctx, args.model, args.pretrained,
                                                       args.dataset_name, None, args.dtype,
-              
+                                                      ckpt_dir=args.ckpt_dir,
+                                                      start_step=args.start_step)
+
+    store = mx.kv.create(args.kvstore)
+    nlp.utils.mkdir(args.ckpt_dir)
+
+    if args.data:
+        logging.info('Using training data at {}'.format(args.data))
+        num_parts = 1 if args.dummy_data_len else store.num_workers
+        part_idx = 0 if args.dummy_data_len else store.rank
+        data_train = get_pretrain_data_npz(args.data, args.batch_size, len(ctx), True,
+                                           args.use_avg_len, args.num_buckets,
+                                           num_parts=num_parts, part_idx=part_idx,
+                                           prefetch=not args.dummy_data_len)
+        train(data_train, model, nsp_loss, mlm_loss, len(vocab), ctx, store)
+    if args.data_eval:
+        logging.info('Using evaluation data at {}'.format(args.data_eval))
+        data_eval = get_pretrain_data_npz(args.data_eval, args.batch_size_eval, len(ctx),
+                                          False, False, 1)
+        evaluate(data_eval, model, nsp_loss, mlm_loss, len(vocab), ctx,
+                 args.log_interval, args.dtype)
