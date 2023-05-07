@@ -45,4 +45,29 @@ def train_batch_ch12(net, features, labels, loss, trainer, ctx_list):
         ls = [loss(py, y) for py, y in zip(pys, ys)]
     for l in ls:
         l.backward()
-    trainer.step(feat
+    trainer.step(features.shape[0])
+    train_loss_sum = sum([l.sum().asscalar() for l in ls])
+    train_acc_sum = sum(d2l.accuracy(py, y) for py, y in zip(pys, ys))
+    return train_loss_sum, train_acc_sum
+
+def train(net, train_iter, test_iter, loss, trainer, num_epochs,
+               ctx_list=d2l.try_all_gpus()):
+    num_batches, timer = len(train_iter), d2l.Timer()
+    for epoch in range(num_epochs):
+        # store training_loss, training_accuracy, num_examples, num_features
+        metric = [0.0] * 4
+        for i, (features, labels) in enumerate(train_iter):
+            timer.start()
+            l, acc = d2l.train_batch_ch12(
+                net, features, labels, loss, trainer, ctx_list)
+            metric = [a+b for a, b in zip(metric, (l, acc, labels.shape[0], labels.size))]
+            timer.stop()
+            if (i+1) % (num_batches // 5) == 0:
+                print(epoch+i/num_batches,
+                             (metric[0]/metric[2], metric[1]/metric[3], None))
+        test_acc = d2l.evaluate_accuracy_gpus(net, test_iter)
+    print('loss %.3f, train acc %.3f, test acc %.3f' % (
+        metric[0]/metric[2], metric[1]/metric[3], test_acc))
+    print('%.1f exampes/sec on %s' % (
+        metric[2]*num_epochs/timer.sum(), ctx_list))
+
