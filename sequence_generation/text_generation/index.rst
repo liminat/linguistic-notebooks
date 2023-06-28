@@ -71,4 +71,56 @@ Finally, you can also try to constrain the sampling to sample only from the top-
 
 Output is
 
-..
+.. code-block:: console
+
+    Sampling Parameters: beam_size=5, temperature=0.95, use_top_k=800
+    Generation Result:
+    ['I love it. It is the same as the Old Age. The best known of this is the <eos>', -30.544556]
+    ['I love it and had a weak start by a group of only three-year-old fans. <eos>', -44.970097]
+    ['I love it ". <eos>', -4.725212]
+    ['I love it with the <unk>. <eos>', -7.236909]
+    ['I love it and its working-based <unk> ". <eos>', -25.340023]
+
+Beam Search Generator
+~~~~~~~~~~~~~~~~~~~~~
+
+Use the following command to decode using beam search.
+
+.. code-block:: console
+
+   $ python sequence_sampling.py beam-search --bos 'I love it' --beam-size 5 --print-num 5
+
+Output is
+
+.. code-block:: console
+
+    Beam Seach Parameters: beam_size=5, alpha=0.0, K=5
+    Generation Result:
+    ['I love it. <eos>', -2.6606221]
+    ['I love it. "<eos>', -4.072001]
+    ['I love it, and the <unk> of the <unk>. <eos>', -14.573]
+    ['I love it, and the <unk> of the <unk>. The <unk> of the <unk>, the <unk>, <eos>', -28.968985]
+    ['I love it, and the <unk> of the <unk>. The <unk> of the <unk>, the <unk> and <eos>', -30.064144]
+
+You can also try a larger beam size, such as 15.
+
+.. code-block:: console
+
+   $ python sequence_sampling.py beam-search --bos 'I love it' --beam-size 15 --print-num 15
+
+Output is
+
+.. code-block:: console
+
+    Beam Seach Parameters: beam_size=15, alpha=0.0, K=5
+    Generation Result:
+    ['I love it. <eos>', -2.6606221]
+    ['I love it. "<eos>', -4.072001]
+    ['I love it ". <eos>', -5.222643]
+    ['I love it, and the <unk> of the <unk>. <eos>', -14.573]
+    ['I love it. It was the first time in the history of the history of the history of the <eos>', -21.041868]
+    ['I love it. It was the first time in the history of the history of the country. <eos>', -21.262276]
+    ['I love it. It was the first time in the history of the history of the United States. <eos>', -21.826159]
+    ['I love it. It was the first time in the history of the history of the world. <eos>', -21.930265]
+    ['I love it. It was the first time in the history of the history of the country. The <eos>', -21.94392]
+    ['I love it. It was the first time in the history of the histor
