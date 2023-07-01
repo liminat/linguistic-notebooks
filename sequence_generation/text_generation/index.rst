@@ -123,4 +123,9 @@ Output is
     ['I love it. It was the first time in the history of the history of the United States. <eos>', -21.826159]
     ['I love it. It was the first time in the history of the history of the world. <eos>', -21.930265]
     ['I love it. It was the first time in the history of the history of the country. The <eos>', -21.94392]
-    ['I love it. It was the first time in the history of the histor
+    ['I love it. It was the first time in the history of the history of the city. <eos>', -22.00894]
+    ['I love it. It was the first time in the history of the history of the country that the <eos>', -22.152416]
+    ['I love it. It was the first time in the history of the history of the United States, <eos>', -22.170143]
+    ['I love it. It was the first time in the history of the history of the country, and <eos>', -22.188667]
+    ['I love it. It was the first time in the history of the history of the United States that <eos>', -22.254015]
+    ['I love it. It was the first time in the history of the history of the state. <eos>', -22.398975]
