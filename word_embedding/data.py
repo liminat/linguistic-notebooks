@@ -95,4 +95,59 @@ def wiki(wiki_root, wiki_date, wiki_language, max_vocab_size=None):
         Parameter for WikiDumpStream
     wiki_date : str
         Parameter for WikiDumpStream
-    wiki_langua
+    wiki_language : str
+        Parameter for WikiDumpStream
+    max_vocab_size : int, optional
+        Specifies a maximum size for the vocabulary.
+
+    Returns
+    -------
+    gluonnlp.data.DataStream
+        Each sample is a valid input to
+        gluonnlp.data.EmbeddingCenterContextBatchify.
+    gluonnlp.Vocab
+        Vocabulary of all tokens in the Wikipedia corpus as provided by
+        WikiDumpStream but with maximum size max_vocab_size.
+    idx_to_counts : list of int
+        Mapping from token indices to their occurrence-counts in the Wikipedia
+        corpus.
+
+    """
+    data = WikiDumpStream(
+        root=os.path.expanduser(wiki_root), language=wiki_language,
+        date=wiki_date)
+    vocab = data.vocab
+    if max_vocab_size:
+        for token in vocab.idx_to_token[max_vocab_size:]:
+            vocab.token_to_idx.pop(token)
+        vocab.idx_to_token = vocab.idx_to_token[:max_vocab_size]
+    idx_to_counts = data.idx_to_counts
+
+    def code(shard):
+        return [[vocab[token] for token in sentence if token in vocab]
+                for sentence in shard]
+
+    data = data.transform(code)
+    return data, vocab, idx_to_counts
+
+
+def transform_data_fasttext(data, vocab, idx_to_counts, cbow, ngram_buckets,
+                            ngrams, batch_size, window_size,
+                            frequent_token_subsampling=1E-4, dtype='float32',
+                            index_dtype='int64'):
+    """Transform a DataStream of coded DataSets to a DataStream of batches.
+
+    Parameters
+    ----------
+    data : gluonnlp.data.DataStream
+        DataStream where each sample is a valid input to
+        gluonnlp.data.EmbeddingCenterContextBatchify.
+    vocab : gluonnlp.Vocab
+        Vocabulary containing all tokens whose indices occur in data. For each
+        token, it's associated subwords will be computed and used for
+        constructing the batches. No subwords are used if ngram_buckets is 0.
+    idx_to_counts : list of int
+        List of integers such that idx_to_counts[idx] represents the count of
+        vocab.idx_to_token[idx] in the underlying dataset. The count
+        information is used to subsample frequent words in the dataset.
+        Each token is independently dropped with
