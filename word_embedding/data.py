@@ -255,4 +255,68 @@ def transform_data_fasttext(data, vocab, idx_to_counts, cbow, ngram_buckets,
 def transform_data_word2vec(data, vocab, idx_to_counts, cbow, batch_size,
                             window_size, frequent_token_subsampling=1E-4,
                             dtype='float32', index_dtype='int64'):
-    """Transform a DataStream of coded DataSet
+    """Transform a DataStream of coded DataSets to a DataStream of batches.
+
+    Parameters
+    ----------
+    data : gluonnlp.data.DataStream
+        DataStream where each sample is a valid input to
+        gluonnlp.data.EmbeddingCenterContextBatchify.
+    vocab : gluonnlp.Vocab
+        Vocabulary containing all tokens whose indices occur in data.
+    idx_to_counts : list of int
+        List of integers such that idx_to_counts[idx] represents the count of
+        vocab.idx_to_token[idx] in the underlying dataset. The count
+        information is used to subsample frequent words in the dataset.
+        Each token is independently dropped with probability 1 - sqrt(t /
+        (count / sum_counts)) where t is the hyperparameter
+        frequent_token_subsampling.
+    batch_size : int
+        The returned data stream iterates over batches of batch_size.
+    window_size : int
+        The context window size for
+        gluonnlp.data.EmbeddingCenterContextBatchify.
+    frequent_token_subsampling : float
+        Hyperparameter for subsampling. See idx_to_counts above for more
+        information.
+    dtype : str or np.dtype, default 'float32'
+        Data type of data array.
+    index_dtype : str or np.dtype, default 'int64'
+        Data type of index arrays.
+
+    Returns
+    -------
+    gluonnlp.data.DataStream
+        Stream over batches.
+    """
+
+    sum_counts = float(sum(idx_to_counts))
+    idx_to_pdiscard = [
+        1 - math.sqrt(frequent_token_subsampling / (count / sum_counts))
+        for count in idx_to_counts]
+
+    def subsample(shard):
+        return [[
+            t for t, r in zip(sentence,
+                              np.random.uniform(0, 1, size=len(sentence)))
+            if r > idx_to_pdiscard[t]] for sentence in shard]
+
+    data = data.transform(subsample)
+
+    batchify = nlp.data.batchify.EmbeddingCenterContextBatchify(
+        batch_size=batch_size, window_size=window_size, cbow=cbow,
+        weight_dtype=dtype, index_dtype=index_dtype)
+    data = data.transform(batchify)
+    data = UnchainStream(data)
+
+    if cbow:
+        batchify_fn = cbow_batch
+    else:
+        batchify_fn = skipgram_batch
+    batchify_fn = functools.partial(batchify_fn, num_tokens=len(vocab),
+                                    dtype=dtype, index_dtype=index_dtype)
+
+    return data, batchify_fn,
+
+
+def cbow_fasttext_b
