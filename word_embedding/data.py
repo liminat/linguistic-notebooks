@@ -319,4 +319,59 @@ def transform_data_word2vec(data, vocab, idx_to_counts, cbow, batch_size,
     return data, batchify_fn,
 
 
-def cbow_fasttext_b
+def cbow_fasttext_batch(centers, contexts, num_tokens, subword_lookup, dtype,
+                        index_dtype):
+    """Create a batch for CBOW training objective with subwords."""
+    _, contexts_row, contexts_col = contexts
+    data, row, col = subword_lookup(contexts_row, contexts_col)
+    centers = mx.nd.array(centers, dtype=index_dtype)
+    contexts = mx.nd.sparse.csr_matrix(
+        (data, (row, col)), dtype=dtype,
+        shape=(len(centers), num_tokens))  # yapf: disable
+    return centers, contexts
+
+
+def skipgram_fasttext_batch(centers, contexts, num_tokens, subword_lookup,
+                            dtype, index_dtype):
+    """Create a batch for SG training objective with subwords."""
+    contexts = mx.nd.array(contexts[2], dtype=index_dtype)
+    data, row, col = subword_lookup(centers)
+    centers = mx.nd.array(centers, dtype=index_dtype)
+    centers_csr = mx.nd.sparse.csr_matrix(
+        (data, (row, col)), dtype=dtype,
+        shape=(len(centers), num_tokens))  # yapf: disable
+    return centers_csr, contexts, centers
+
+
+def cbow_batch(centers, contexts, num_tokens, dtype, index_dtype):
+    """Create a batch for CBOW training objective."""
+    contexts_data, contexts_row, contexts_col = contexts
+    centers = mx.nd.array(centers, dtype=index_dtype)
+    contexts = mx.nd.sparse.csr_matrix(
+        (contexts_data, (contexts_row, contexts_col)),
+        dtype=dtype, shape=(len(centers), num_tokens))  # yapf: disable
+    return centers, contexts
+
+
+def skipgram_batch(centers, contexts, num_tokens, dtype, index_dtype):
+    """Create a batch for SG training objective."""
+    contexts = mx.nd.array(contexts[2], dtype=index_dtype)
+    indptr = mx.nd.arange(len(centers) + 1)
+    centers = mx.nd.array(centers, dtype=index_dtype)
+    centers_csr = mx.nd.sparse.csr_matrix(
+        (mx.nd.ones(centers.shape), centers, indptr), dtype=dtype,
+        shape=(len(centers), num_tokens))
+    return centers_csr, contexts, centers
+
+
+class UnchainStream(nlp.data.DataStream):
+    def __init__(self, iterable):
+        self._stream = iterable
+
+    def __iter__(self):
+        return iter(itertools.chain.from_iterable(self._stream))
+
+
+@numba_njit
+def skipgram_lookup(indices, subwordidxs, subwordidxsptr, offset=0):
+    """Get a sparse COO array of words and sub
