@@ -206,4 +206,53 @@ def transform_data_fasttext(data, vocab, idx_to_counts, cbow, ngram_buckets,
 
     data = data.transform(subsample)
 
-    batchify = nlp.data.batchify.EmbeddingCen
+    batchify = nlp.data.batchify.EmbeddingCenterContextBatchify(
+        batch_size=batch_size, window_size=window_size, cbow=cbow,
+        weight_dtype=dtype, index_dtype=index_dtype)
+    data = data.transform(batchify)
+
+    with print_time('prepare subwords'):
+        subword_function = nlp.vocab.create_subword_function(
+            'NGramHashes', ngrams=ngrams, num_subwords=ngram_buckets)
+
+        # Store subword indices for all words in vocabulary
+        idx_to_subwordidxs = list(subword_function(vocab.idx_to_token))
+        subwordidxs = np.concatenate(idx_to_subwordidxs)
+        subwordidxsptr = np.cumsum([
+            len(subwordidxs) for subwordidxs in idx_to_subwordidxs])
+        subwordidxsptr = np.concatenate([
+            np.zeros(1, dtype=np.int64), subwordidxsptr])
+        if cbow:
+            subword_lookup = functools.partial(
+                cbow_lookup, subwordidxs=subwordidxs,
+                subwordidxsptr=subwordidxsptr, offset=len(vocab))
+        else:
+            subword_lookup = functools.partial(
+                skipgram_lookup, subwordidxs=subwordidxs,
+                subwordidxsptr=subwordidxsptr, offset=len(vocab))
+        max_subwordidxs_len = max(len(s) for s in idx_to_subwordidxs)
+        if max_subwordidxs_len > 500:
+            warnings.warn(
+                'The word with largest number of subwords '
+                'has {} subwords, suggesting there are '
+                'some noisy words in your vocabulary. '
+                'You should filter out very long words '
+                'to avoid memory issues.'.format(max_subwordidxs_len))
+
+    data = UnchainStream(data)
+
+    if cbow:
+        batchify_fn = cbow_fasttext_batch
+    else:
+        batchify_fn = skipgram_fasttext_batch
+    batchify_fn = functools.partial(
+        batchify_fn, num_tokens=len(vocab) + len(subword_function),
+        subword_lookup=subword_lookup, dtype=dtype, index_dtype=index_dtype)
+
+    return data, batchify_fn, subword_function
+
+
+def transform_data_word2vec(data, vocab, idx_to_counts, cbow, batch_size,
+                            window_size, frequent_token_subsampling=1E-4,
+                            dtype='float32', index_dtype='int64'):
+    """Transform a DataStream of coded DataSet
