@@ -150,4 +150,60 @@ def transform_data_fasttext(data, vocab, idx_to_counts, cbow, ngram_buckets,
         List of integers such that idx_to_counts[idx] represents the count of
         vocab.idx_to_token[idx] in the underlying dataset. The count
         information is used to subsample frequent words in the dataset.
-        Each token is independently dropped with
+        Each token is independently dropped with probability 1 - sqrt(t /
+        (count / sum_counts)) where t is the hyperparameter
+        frequent_token_subsampling.
+    cbow : boolean
+        If True, batches for CBOW are returned.
+    ngram_buckets : int
+        Number of hash buckets to consider for the fastText
+        nlp.vocab.NGramHashes subword function.
+    ngrams : list of int
+        For each integer n in the list, all ngrams of length n will be
+        considered by the nlp.vocab.NGramHashes subword function.
+    batch_size : int
+        The returned data stream iterates over batches of batch_size.
+    window_size : int
+        The context window size for
+        gluonnlp.data.EmbeddingCenterContextBatchify.
+    frequent_token_subsampling : float
+        Hyperparameter for subsampling. See idx_to_counts above for more
+        information.
+    dtype : str or np.dtype, default 'float32'
+        Data type of data array.
+    index_dtype : str or np.dtype, default 'int64'
+        Data type of index arrays.
+
+    Returns
+    -------
+    gluonnlp.data.DataStream
+        Stream over batches. Each returned element is a list corresponding to
+        the arguments for the forward pass of model.SG or model.CBOW
+        respectively based on if cbow is False or True. If ngarm_buckets > 0,
+        the returned sample will contain ngrams. Both model.SG or model.CBOW
+        will handle them correctly as long as they are initialized with the
+        subword_function returned as second argument by this function (see
+        below).
+    gluonnlp.vocab.NGramHashes
+        The subword_function used for obtaining the subwords in the returned
+        batches.
+
+    """
+    if ngram_buckets <= 0:
+        raise ValueError('Invalid ngram_buckets. Use Word2Vec training '
+                         'pipeline if not interested in ngrams.')
+
+    sum_counts = float(sum(idx_to_counts))
+    idx_to_pdiscard = [
+        1 - math.sqrt(frequent_token_subsampling / (count / sum_counts))
+        for count in idx_to_counts]
+
+    def subsample(shard):
+        return [[
+            t for t, r in zip(sentence,
+                              np.random.uniform(0, 1, size=len(sentence)))
+            if r > idx_to_pdiscard[t]] for sentence in shard]
+
+    data = data.transform(subsample)
+
+    batchify = nlp.data.batchify.EmbeddingCen
