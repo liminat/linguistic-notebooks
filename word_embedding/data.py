@@ -374,4 +374,66 @@ class UnchainStream(nlp.data.DataStream):
 
 @numba_njit
 def skipgram_lookup(indices, subwordidxs, subwordidxsptr, offset=0):
-    """Get a sparse COO array of words and sub
+    """Get a sparse COO array of words and subwords for SkipGram.
+
+    Parameters
+    ----------
+    indices : numpy.ndarray
+        Array containing numbers in [0, vocabulary_size). The element at
+        position idx is taken to be the word that occurs at row idx in the
+        SkipGram batch.
+    offset : int
+        Offset to add to each subword index.
+    subwordidxs : numpy.ndarray
+        Array containing concatenation of all subwords of all tokens in the
+        vocabulary, in order of their occurrence in the vocabulary.
+        For example np.concatenate(idx_to_subwordidxs)
+    subwordidxsptr
+        Array containing pointers into subwordidxs array such that
+        subwordidxs[subwordidxsptr[i]:subwordidxsptr[i+1]] returns all subwords
+        of of token i. For example subwordidxsptr = np.cumsum([
+        len(subwordidxs) for subwordidxs in idx_to_subwordidxs])
+    offset : int, default 0
+        Offset to add to each subword index.
+
+    Returns
+    -------
+    numpy.ndarray of dtype float32
+        Array containing weights such that for each row, all weights sum to
+        1. In particular, all elements in a row have weight 1 /
+        num_elements_in_the_row
+    numpy.ndarray of dtype int64
+        This array is the row array of a sparse array of COO format.
+    numpy.ndarray of dtype int64
+        This array is the col array of a sparse array of COO format.
+
+    """
+    row = []
+    col = []
+    data = []
+    for i, idx in enumerate(indices):
+        start = subwordidxsptr[idx]
+        end = subwordidxsptr[idx + 1]
+
+        row.append(i)
+        col.append(idx)
+        data.append(1 / (1 + end - start))
+        for subword in subwordidxs[start:end]:
+            row.append(i)
+            col.append(subword + offset)
+            data.append(1 / (1 + end - start))
+
+    return (np.array(data, dtype=np.float32), np.array(row, dtype=np.int64),
+            np.array(col, dtype=np.int64))
+
+
+@numba_njit
+def cbow_lookup(context_row, context_col, subwordidxs, subwordidxsptr,
+                offset=0):
+    """Get a sparse COO array of words and subwords for CBOW.
+
+    Parameters
+    ----------
+    context_row : numpy.ndarray of dtype int64
+        Array of same length as context_col containing numbers in [0,
+        batch_size). For each idx, context_row[idx] s
