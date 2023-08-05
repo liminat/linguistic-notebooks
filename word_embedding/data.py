@@ -560,4 +560,4 @@ class WikiDumpStream(SimpleDatasetStream):
     def idx_to_counts(self):
         path = os.path.join(self._path, 'counts.json')
         with io.open(path, 'r', encoding='utf-8') as in_file:
-            return
+            return json.load(in_file)
