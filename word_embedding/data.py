@@ -436,4 +436,60 @@ def cbow_lookup(context_row, context_col, subwordidxs, subwordidxsptr,
     ----------
     context_row : numpy.ndarray of dtype int64
         Array of same length as context_col containing numbers in [0,
-        batch_size). For each idx, context_row[idx] s
+        batch_size). For each idx, context_row[idx] specifies the row that
+        context_col[idx] occurs in a sparse matrix.
+    context_col : numpy.ndarray of dtype int64
+        Array of same length as context_row containing numbers in [0,
+        vocabulary_size). For each idx, context_col[idx] is one of the
+        context words in the context_row[idx] row of the batch.
+    subwordidxs : numpy.ndarray
+        Array containing concatenation of all subwords of all tokens in the
+        vocabulary, in order of their occurrence in the vocabulary.
+        For example np.concatenate(idx_to_subwordidxs)
+    subwordidxsptr
+        Array containing pointers into subwordidxs array such that
+        subwordidxs[subwordidxsptr[i]:subwordidxsptr[i+1]] returns all subwords
+        of of token i. For example subwordidxsptr = np.cumsum([
+        len(subwordidxs) for subwordidxs in idx_to_subwordidxs])
+    offset : int, default 0
+        Offset to add to each subword index.
+
+    Returns
+    -------
+    numpy.ndarray of dtype float32
+        Array containing weights summing to 1. The weights are chosen such
+        that the sum of weights for all subwords and word units of a given
+        context word is equal to 1 / number_of_context_words_in_the_row.
+        This array is the data array of a sparse array of COO format.
+    numpy.ndarray of dtype int64
+        This array is the row array of a sparse array of COO format.
+    numpy.ndarray of dtype int64
+        This array is the col array of a sparse array of COO format.
+        Array containing weights such that for each row, all weights sum to
+        1. In particular, all elements in a row have weight 1 /
+        num_elements_in_the_row
+
+    """
+    row = []
+    col = []
+    data = []
+
+    num_rows = np.max(context_row) + 1
+    row_to_numwords = np.zeros(num_rows)
+
+    for i, idx in enumerate(context_col):
+        start = subwordidxsptr[idx]
+        end = subwordidxsptr[idx + 1]
+
+        row_ = context_row[i]
+        row_to_numwords[row_] += 1
+
+        row.append(row_)
+        col.append(idx)
+        data.append(1 / (1 + end - start))
+        for subword in subwordidxs[start:end]:
+            row.append(row_)
+            col.append(subword + offset)
+            data.append(1 / (1 + end - start))
+
+    # Normalize by number of words
