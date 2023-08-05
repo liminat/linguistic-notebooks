@@ -56,4 +56,59 @@ class Net(mx.gluon.HybridBlock):
     """
 
     # pylint: disable=abstract-method
-    def __init__(self, token_to_idx, output_dim, b
+    def __init__(self, token_to_idx, output_dim, batch_size, negatives_weights,
+                 subword_function=None, num_negatives=5, smoothing=0.75,
+                 sparse_grad=True, dtype='float32', **kwargs):
+        super(Net, self).__init__(**kwargs)
+
+        self._kwargs = dict(
+            input_dim=len(token_to_idx), output_dim=output_dim, dtype=dtype,
+            sparse_grad=sparse_grad, num_negatives=num_negatives)
+
+        with self.name_scope():
+            if subword_function is not None:
+                self.embedding = nlp.model.train.FasttextEmbeddingModel(
+                    token_to_idx=token_to_idx,
+                    subword_function=subword_function,
+                    output_dim=output_dim,
+                    weight_initializer=mx.init.Uniform(scale=1 / output_dim),
+                    sparse_grad=sparse_grad,
+                )
+            else:
+                self.embedding = nlp.model.train.CSREmbeddingModel(
+                    token_to_idx=token_to_idx,
+                    output_dim=output_dim,
+                    weight_initializer=mx.init.Uniform(scale=1 / output_dim),
+                    sparse_grad=sparse_grad,
+                )
+            self.embedding_out = mx.gluon.nn.Embedding(
+                len(token_to_idx), output_dim=output_dim,
+                weight_initializer=mx.init.Zero(), sparse_grad=sparse_grad,
+                dtype=dtype)
+
+            self.negatives_sampler = nlp.data.UnigramCandidateSampler(
+                weights=negatives_weights**smoothing, shape=(batch_size, ),
+                dtype='int64')
+
+    def __getitem__(self, tokens):
+        return self.embedding[tokens]
+
+
+class SG(Net):
+    """SkipGram network"""
+
+    # pylint: disable=arguments-differ
+    def hybrid_forward(self, F, center, context, center_words):
+        """SkipGram forward pass.
+
+        Parameters
+        ----------
+        center : mxnet.nd.NDArray or mxnet.sym.Symbol
+            Sparse CSR array of word / subword indices of shape (batch_size,
+            len(token_to_idx) + num_subwords). Embedding for center words are
+            computed via F.sparse.dot between the CSR center array and the
+            weight matrix.
+        context : mxnet.nd.NDArray or mxnet.sym.Symbol
+            Dense array of context words of shape (batch_size, ). Also used for
+            row-wise independently masking negatives equal to one of context.
+        center_words : mxnet.nd.
