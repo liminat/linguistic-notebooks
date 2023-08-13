@@ -111,4 +111,64 @@ class SG(Net):
         context : mxnet.nd.NDArray or mxnet.sym.Symbol
             Dense array of context words of shape (batch_size, ). Also used for
             row-wise independently masking negatives equal to one of context.
-        center_words : mxnet.nd.
+        center_words : mxnet.nd.NDArray or mxnet.sym.Symbol
+            Dense array of center words of shape (batch_size, ). Only used for
+            row-wise independently masking negatives equal to one of
+            center_words.
+        """
+
+        # negatives sampling
+        negatives = []
+        mask = []
+        for _ in range(self._kwargs['num_negatives']):
+            negatives.append(self.negatives_sampler(center_words))
+            mask_ = negatives[-1] != center_words
+            mask_ = F.stack(mask_, (negatives[-1] != context))
+            mask.append(mask_.min(axis=0))
+
+        negatives = F.stack(*negatives, axis=1)
+        mask = F.stack(*mask, axis=1).astype(np.float32)
+
+        # center - context pairs
+        emb_center = self.embedding(center).expand_dims(1)
+        emb_context = self.embedding_out(context).expand_dims(2)
+        pred_pos = F.batch_dot(emb_center, emb_context).squeeze()
+        loss_pos = (F.relu(pred_pos) - pred_pos + F.Activation(
+            -F.abs(pred_pos), act_type='softrelu')) / (mask.sum(axis=1) + 1)
+
+        # center - negatives pairs
+        emb_negatives = self.embedding_out(negatives).reshape(
+            (-1, self._kwargs['num_negatives'],
+             self._kwargs['output_dim'])).swapaxes(1, 2)
+        pred_neg = F.batch_dot(emb_center, emb_negatives).squeeze()
+        mask = mask.reshape((-1, self._kwargs['num_negatives']))
+        loss_neg = (F.relu(pred_neg) + F.Activation(
+            -F.abs(pred_neg), act_type='softrelu')) * mask
+        loss_neg = loss_neg.sum(axis=1) / (mask.sum(axis=1) + 1)
+
+        return loss_pos + loss_neg
+
+
+class CBOW(Net):
+    """CBOW network"""
+
+    # pylint: disable=arguments-differ
+    def hybrid_forward(self, F, center, context):
+        """CBOW forward pass.
+
+        Parameters
+        ----------
+        center : mxnet.nd.NDArray or mxnet.sym.Symbol
+            Dense array of center words of shape (batch_size, ).
+        context : mxnet.nd.NDArray or mxnet.sym.Symbol
+            Sparse CSR array of word / subword indices of shape (batch_size,
+            len(vocab) + num_subwords). Embedding for context words are
+            computed via F.sparse.dot between the CSR center array and the
+            weight matrix.
+
+        """
+        # negatives sampling
+        negatives = []
+        mask = []
+        for _ in range(self._kwargs['num_negatives']):
+            nega
