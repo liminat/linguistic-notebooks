@@ -171,4 +171,27 @@ class CBOW(Net):
         negatives = []
         mask = []
         for _ in range(self._kwargs['num_negatives']):
-            nega
+            negatives.append(self.negatives_sampler(center))
+            mask.append(negatives[-1] != center)
+
+        negatives = F.stack(*negatives, axis=1)
+        mask = F.stack(*mask, axis=1).astype(np.float32)
+
+        # context - center samples
+        emb_context = self.embedding(context).expand_dims(1)
+        emb_center = self.embedding_out(center).expand_dims(2)
+        pred_pos = F.batch_dot(emb_context, emb_center).squeeze()
+        loss_pos = (F.relu(pred_pos) - pred_pos + F.Activation(
+            -F.abs(pred_pos), act_type='softrelu')) / (mask.sum(axis=1) + 1)
+
+        # context - negatives samples
+        emb_negatives = self.embedding_out(negatives).reshape(
+            (-1, self._kwargs['num_negatives'],
+             self._kwargs['output_dim'])).swapaxes(1, 2)
+        pred_neg = F.batch_dot(emb_context, emb_negatives).squeeze()
+        mask = mask.reshape((-1, self._kwargs['num_negatives']))
+        loss_neg = (F.relu(pred_neg) + F.Activation(
+            -F.abs(pred_neg), act_type='softrelu')) * mask
+        loss_neg = loss_neg.sum(axis=1) / (mask.sum(axis=1) + 1)
+
+        return loss_pos + loss_neg
